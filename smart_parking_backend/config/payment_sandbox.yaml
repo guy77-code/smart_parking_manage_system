@@ -1,0 +1,13 @@
+# 支付网关沙箱配置文件
+payment_gateway:
+  alipay:
+    app_id: "9021000156672666"  # 支付宝沙箱应用AppID（在蚂蚁开放平台沙箱环境中生成）
+    private_key_path: "./certs/alipay/app_private_key.pem"  # 你自己生成的应用私钥
+    public_key_path: "./certs/alipay/alipay_public_key.pem" # 支付宝沙箱公钥
+    notify_url: " https://unfretfully-immunogenetic-takisha.ngrok-free.dev/api/payment/alipay/notify"  # 支付回调地址
+    return_url: " https://unfretfully-immunogenetic-takisha.ngrok-free.dev/api/payment/alipay/return"  # 支付完成返回地址
+    gateway_url: "https://openapi-sandbox.dl.alipaydev.com/gateway.do"  # 沙箱网关地址
+    charset: "utf-8"
+    sign_type: "RSA2"
+
+

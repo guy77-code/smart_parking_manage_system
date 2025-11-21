@@ -1,0 +1,25 @@
+version: '3.9'
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: mysql-container
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: 12345
+      MYSQL_DATABASE: smart_parking
+    ports:
+      - "3306:3306"
+    volumes:
+      - /mydata/mysql/data:/var/lib/mysql   # 绑定挂载格式：- "宿主机路径:容器内路径"
+
+  redis:
+    image: redis:7
+    container_name: redis-container
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: 12345
+    ports:
+      - "6379:6379"
+    volumes:
+      - ./mydata/redis/data:/data
+

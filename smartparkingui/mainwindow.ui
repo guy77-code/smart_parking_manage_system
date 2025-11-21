@@ -1,0 +1,126 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>MainWindow</class>
+ <widget class="QMainWindow" name="MainWindow">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>800</width>
+    <height>600</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>智能停车管理系统</string>
+  </property>
+  <widget class="QWidget" name="centralwidget">
+   <layout class="QVBoxLayout" name="verticalLayout">
+    <item>
+     <widget class="QStackedWidget" name="stackedWidget">
+      <property name="currentIndex">
+       <number>0</number>
+      </property>
+      <widget class="QWidget" name="loginPage">
+       <layout class="QVBoxLayout" name="verticalLayout_2">
+        <item>
+         <widget class="QLabel" name="label_title">
+          <property name="styleSheet">
+           <string notr="true">font-size: 16px; font-weight: bold; padding: 10px;</string>
+          </property>
+          <property name="text">
+           <string>智能停车管理系统登录</string>
+          </property>
+          <property name="alignment">
+           <set>Qt::AlignmentFlag::AlignCenter</set>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QLineEdit" name="edit_username">
+          <property name="styleSheet">
+           <string notr="true">padding: 8px; font-size: 14px; font-family: &quot;Microsoft YaHei&quot;, &quot;SimHei&quot;, sans-serif;</string>
+          </property>
+          <property name="inputMethodHints">
+           <set>Qt::InputMethodHint::ImhPreferUppercase</set>
+          </property>
+          <property name="placeholderText">
+           <string>请输入手机号</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QLineEdit" name="edit_password">
+          <property name="styleSheet">
+           <string notr="true">padding: 8px; font-size: 14px; font-family: &quot;Microsoft YaHei&quot;, &quot;SimHei&quot;, sans-serif;</string>
+          </property>
+          <property name="inputMethodHints">
+           <set>Qt::InputMethodHint::ImhHiddenText|Qt::InputMethodHint::ImhNoPredictiveText</set>
+          </property>
+          <property name="echoMode">
+           <enum>QLineEdit::EchoMode::Password</enum>
+          </property>
+          <property name="placeholderText">
+           <string>请输入密码</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="btn_login">
+          <property name="styleSheet">
+           <string notr="true">padding: 10px; font-size: 14px; background-color: #4CAF50; color: white; border: none; border-radius: 4px;</string>
+          </property>
+          <property name="text">
+           <string>登录</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <layout class="QHBoxLayout" name="horizontalLayout">
+          <item>
+           <widget class="QPushButton" name="btn_exit">
+            <property name="styleSheet">
+             <string notr="true">padding: 8px; font-size: 14px; background-color: #f44336; color: white; border: none; border-radius: 4px;</string>
+            </property>
+            <property name="text">
+             <string>退出系统</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="btn_register">
+            <property name="styleSheet">
+             <string notr="true">padding: 8px; font-size: 14px; background-color: #2196F3; color: white; border: none; border-radius: 4px;</string>
+            </property>
+            <property name="text">
+             <string>新用户注册</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </item>
+        <item>
+         <widget class="QLabel" name="label_status">
+          <property name="styleSheet">
+           <string notr="true">color: red; padding: 5px; font-size: 12px; font-family: &quot;Microsoft YaHei&quot;, &quot;SimHei&quot;, sans-serif;</string>
+          </property>
+          <property name="text">
+           <string/>
+          </property>
+          <property name="alignment">
+           <set>Qt::AlignmentFlag::AlignCenter</set>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </widget>
+      <widget class="QWidget" name="userPage">
+       <!-- 这里将是用户主界面的内容 -->
+      </widget>
+     </widget>
+    </item>
+   </layout>
+  </widget>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

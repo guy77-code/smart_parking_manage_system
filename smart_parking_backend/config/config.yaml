@@ -1,0 +1,35 @@
+server:
+  port: 8080
+
+# database:
+#   host: mysql-container
+#   port: 3306
+#   user: root
+#   password: 12345
+#   name: smart_parking
+#   charset: utf8mb4
+#   paraeTime:true
+#   loc:Local
+
+# redis:
+#   addr:redis-container:6379
+#   password:12345
+#   db:0
+
+database:
+  host: "127.0.0.1"
+  port: 3306
+  user: "root"
+  password: "12345"
+  name: "smart_parking"
+  charset: "utf8mb4"
+  parseTime: true
+  loc: "Local"
+  maxOpen: 500      # 最大并发连接
+  maxIdle: 100      # 空闲连接
+  maxLife: 30       # 每个连接最多存活30分钟
+
+redis:
+  addr: "127.0.0.1:6379"
+  password: "12345"
+  db: 0

@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>PaymentWindow</class>
+ <widget class="QWidget" name="PaymentWindow">
+  <property name="minimumSize">
+   <size>
+    <width>480</width>
+    <height>320</height>
+   </size>
+  </property>
+  <layout class="QVBoxLayout" name="verticalLayout">
+   <item>
+    <widget class="QLabel" name="label_title">
+     <property name="text"><string>支付订单</string></property>
+     <property name="alignment"><set>Qt::AlignCenter</set></property>
+     <property name="font"><font><pointsize>12</pointsize><bold>true</bold></font></property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QLabel" name="label_info">
+     <property name="text"><string>加载订单信息…</string></property>
+    </widget>
+   </item>
+   <item>
+    <layout class="QHBoxLayout" name="hLayout">
+     <item>
+      <widget class="QPushButton" name="btn_pay">
+       <property name="text"><string>模拟支付（成功）</string></property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="btn_cancel">
+       <property name="text"><string>取消</string></property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

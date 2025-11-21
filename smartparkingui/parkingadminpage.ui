@@ -1,0 +1,161 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>ParkingAdminPage</class>
+ <widget class="QWidget" name="ParkingAdminPage">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>1100</width>
+    <height>700</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>停车场管理员 - 实时管理</string>
+  </property>
+  <layout class="QVBoxLayout" name="verticalLayout">
+   <item>
+    <widget class="QWidget" name="topBar">
+     <layout class="QHBoxLayout" name="topBarLayout">
+      <item>
+       <widget class="QLabel" name="label_title">
+        <property name="text">
+         <string>停车场管理员面板</string>
+        </property>
+        <property name="font">
+         <font>
+          <pointsize>18</pointsize>
+          <bold>true</bold>
+         </font>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <spacer name="topSpacer">
+        <property name="orientation">
+         <enum>Qt::Horizontal</enum>
+        </property>
+       </spacer>
+      </item>
+      <item>
+       <widget class="QPushButton" name="btn_refresh">
+        <property name="text">
+         <string>刷新</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="btn_editSpace">
+        <property name="text">
+         <string>修改车位</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="btn_openReportPage">
+        <property name="text">
+         <string>收入/使用率</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+
+   <item>
+    <widget class="QSplitter" name="mainSplitter">
+     <property name="orientation">
+      <enum>Qt::Horizontal</enum>
+     </property>
+
+     <!-- 左侧实时车位列表 -->
+     <widget class="QWidget" name="leftWidget">
+      <layout class="QVBoxLayout" name="leftLayout">
+       <item>
+        <widget class="QLabel" name="label_realtimeTitle">
+         <property name="text">
+          <string>实时车位占用</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QTableView" name="table_spaces"/>
+       </item>
+      </layout>
+     </widget>
+
+     <!-- 右侧统计与图表 -->
+     <widget class="QWidget" name="rightWidget">
+      <layout class="QVBoxLayout" name="rightLayout">
+       <item>
+        <widget class="QGroupBox" name="group_overview">
+         <property name="title">
+          <string>停车场概览</string>
+         </property>
+         <layout class="QFormLayout" name="formOverview">
+          <item row="0" column="0">
+           <widget class="QLabel" name="label_name">
+            <property name="text">
+             <string>名称：—</string>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="0">
+           <widget class="QLabel" name="label_spacesSummary">
+            <property name="text">
+             <string>占用/总数：—</string>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="0">
+           <widget class="QLabel" name="label_income">
+            <property name="text">
+             <string>今日收入：—</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+
+       <item>
+        <widget class="QGroupBox" name="group_charts">
+         <property name="title">
+          <string>图表视图</string>
+         </property>
+         <layout class="QVBoxLayout" name="chartsLayout">
+          <!-- QChartView 占位，需添加 Qt Charts 模块 -->
+          <widget class="QWidget" name="chart_container">
+          </widget>
+         </layout>
+        </widget>
+       </item>
+
+       <item>
+        <widget class="QWidget" name="bottomButtons">
+         <layout class="QHBoxLayout" name="bottomButtonsLayout">
+          <item>
+           <widget class="QPushButton" name="btn_generateReport">
+            <property name="text">
+             <string>生成月/年报</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <spacer name="spacerBottom"/>
+          </item>
+         </layout>
+        </widget>
+       </item>
+
+      </layout>
+     </widget>
+
+    </widget>
+   </item>
+
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>
