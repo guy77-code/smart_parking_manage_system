@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/signal"
 	"smart_parking_backend/internal/booking"
+	"smart_parking_backend/internal/controller"
 	"smart_parking_backend/internal/inits"
 	"smart_parking_backend/internal/payment"
 	"smart_parking_backend/pkg/logger"
@@ -43,6 +44,9 @@ func main() {
 	}
 
 	paymentSvc := payment.NewService(bookingSvc, cfg)
+
+	// 初始化控制器的支付服务
+	controller.InitPaymentService(paymentSvc)
 
 	// 初始化路由
 	r := router.InitRouter(bookingSvc, paymentSvc)

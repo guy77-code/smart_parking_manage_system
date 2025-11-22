@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"smart_parking_backend/internal/inits"
 	"smart_parking_backend/internal/model"
-	"smart_parking_backend/internal/payment"
 	"strconv"
 	"time"
 
@@ -560,11 +559,26 @@ func VehicleExit(c *gin.Context) {
 		return
 	}
 
-	// 6. 生成支付链接
-	paymentURL, err := payment.CreatePaymentURL(record.RecordID, totalFee+violationFee, "停车费")
+	// 6. 检查支付服务是否已初始化
+	if PaymentService == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "支付服务未初始化"})
+		return
+	}
+
+	// 7. 生成统一支付链接
+	amount := totalFee + violationFee
+	redirectURL, paymentID, err := PaymentService.CreatePayment(
+		record.RecordID,
+		"parking", // 类型：停车付费
+		"alipay",  // 可改成前端传的
+		&amount,
+	)
 	if err != nil {
 		log.Printf("生成支付链接失败: %v", err)
 	}
+
+	// 记录 paymentID 用于调试
+	log.Printf("生成的支付ID: %d", paymentID)
 
 	// 构建响应
 	resp := VehicleExitResponse{
@@ -575,13 +589,14 @@ func VehicleExit(c *gin.Context) {
 		EntryTime:     record.EntryTime,
 		ExitTime:      exitTime,
 		DurationHours: duration.Hours(),
-		TotalFee:      totalFee + violationFee,
+		TotalFee:      amount,
 		IsViolation:   hasViolation,
 		ViolationFee:  violationFee,
-		PaymentURL:    paymentURL,
+		PaymentURL:    redirectURL, // 统一 paymentService 返回的 URL
 	}
 
 	c.JSON(http.StatusOK, resp)
+
 }
 
 // findActiveReservation 查找有效的预约

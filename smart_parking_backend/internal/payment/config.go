@@ -6,7 +6,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// Config 映射 YAML 配置
+// Config 映射 YAML 配置（保留原有 alipay 字段，便于未来扩展）
 type Config struct {
 	Alipay struct {
 		AppID          string `yaml:"app_id"`
@@ -18,6 +18,9 @@ type Config struct {
 		Charset        string `yaml:"charset"`
 		SignType       string `yaml:"sign_type"`
 	} `yaml:"alipay"`
+
+	// 可选：模拟支付页面的基础地址，前端 QT 可在该地址启动页面（若 YAML 未配置则使用默认）
+	SimulateHost string `yaml:"simulate_host"`
 }
 
 // LoadSandboxConfig 从 YAML 文件加载配置

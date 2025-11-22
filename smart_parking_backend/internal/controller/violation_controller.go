@@ -1,16 +1,15 @@
 package controller
 
 import (
-	"errors"
 	"log"
 	"net/http"
 	"smart_parking_backend/internal/inits"
 	"smart_parking_backend/internal/model"
 	"smart_parking_backend/internal/payment"
+	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"gorm.io/gorm"
 )
 
 // ==================== 违规记录管理 ====================
@@ -23,6 +22,14 @@ type ViolationCheckRequest struct {
 // ViolationCheckResponse 违规检查响应
 type ViolationCheckResponse struct {
 	ViolationCount int `json:"violation_count"` // 发现的违规数量
+}
+
+// PaymentService 支付服务实例
+var PaymentService *payment.Service
+
+// InitPaymentService 初始化支付服务
+func InitPaymentService(paymentSvc *payment.Service) {
+	PaymentService = paymentSvc
 }
 
 // CheckViolations 检查违规行为
@@ -356,35 +363,35 @@ func GetUserViolationHistory(c *gin.Context) {
 
 // PayViolationFine 支付罚款
 func PayViolationFine(c *gin.Context) {
-	violationID := c.Param("violation_id")
-	if violationID == "" {
+	vioIDStr := c.Param("violation_id")
+	if vioIDStr == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "违规记录ID不能为空"})
 		return
 	}
 
-	// 查找违规记录
-	var violation model.ViolationRecord
-	if err := inits.DB.First(&violation, violationID).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "未找到违规记录"})
-		} else {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "查询违规记录失败"})
-		}
+	vioID, _ := strconv.Atoi(vioIDStr)
+
+	// 检查支付服务是否已初始化
+	if PaymentService == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "支付服务未初始化"})
 		return
 	}
 
-	// 检查罚款是否已支付
-	if violation.Status == 1 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "罚款已支付"})
-		return
-	}
-
-	// 生成支付链接
-	paymentURL, err := payment.CreatePaymentURL(violation.ViolationID, violation.FineAmount, "违规罚款")
+	// 调用统一 payment service
+	redirectURL, paymentID, err := PaymentService.CreatePayment(
+		uint(vioID),
+		"violation",
+		"alipay",
+		nil, // 从数据库自动获取 fine_amount
+	)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "创建支付链接失败"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"payment_url": paymentURL})
+	c.JSON(http.StatusOK, gin.H{
+		"violation_id": vioID,
+		"payment_id":   paymentID,
+		"payment_url":  redirectURL,
+	})
 }
