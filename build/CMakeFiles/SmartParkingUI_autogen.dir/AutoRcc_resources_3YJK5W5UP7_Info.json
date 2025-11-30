@@ -1,0 +1,31 @@
+{
+	"BUILD_DIR" : "/home/ubuntu/smartparkingproject/build/SmartParkingUI_autogen",
+	"CMAKE_BINARY_DIR" : "/home/ubuntu/smartparkingproject/build",
+	"CMAKE_CURRENT_BINARY_DIR" : "/home/ubuntu/smartparkingproject/build",
+	"CMAKE_CURRENT_SOURCE_DIR" : "/home/ubuntu/smartparkingproject/smartparkingui",
+	"CMAKE_SOURCE_DIR" : "/home/ubuntu/smartparkingproject/smartparkingui",
+	"INCLUDE_DIR" : "/home/ubuntu/smartparkingproject/build/SmartParkingUI_autogen/include",
+	"INPUTS" : 
+	[
+		"/home/ubuntu/smartparkingproject/smartparkingui/ui/AdminMainPage.qml",
+		"/home/ubuntu/smartparkingproject/smartparkingui/ui/ParkingVisualizationPage.qml",
+		"/home/ubuntu/smartparkingproject/smartparkingui/ui/ViolationPage.qml",
+		"/home/ubuntu/smartparkingproject/smartparkingui/ui/AdminDataPage.qml",
+		"/home/ubuntu/smartparkingproject/smartparkingui/ui/UserMainPage.qml",
+		"/home/ubuntu/smartparkingproject/smartparkingui/ui/BookingPage.qml",
+		"/home/ubuntu/smartparkingproject/smartparkingui/ui/OrderHistoryPage.qml",
+		"/home/ubuntu/smartparkingproject/smartparkingui/ui/PaymentPage.qml",
+		"/home/ubuntu/smartparkingproject/smartparkingui/ui/LoginPage.qml",
+		"/home/ubuntu/smartparkingproject/smartparkingui/ui/main.qml"
+	],
+	"LOCK_FILE" : "/home/ubuntu/smartparkingproject/build/CMakeFiles/SmartParkingUI_autogen.dir/AutoRcc_resources_3YJK5W5UP7_Lock.lock",
+	"MULTI_CONFIG" : false,
+	"OPTIONS" : [ "-name", "resources" ],
+	"OUTPUT_CHECKSUM" : "3YJK5W5UP7",
+	"OUTPUT_NAME" : "qrc_resources.cpp",
+	"RCC_EXECUTABLE" : "/home/ubuntu/Qt/6.8.3/gcc_64/libexec/rcc",
+	"RCC_LIST_OPTIONS" : [ "--list" ],
+	"SETTINGS_FILE" : "/home/ubuntu/smartparkingproject/build/CMakeFiles/SmartParkingUI_autogen.dir/AutoRcc_resources_3YJK5W5UP7_Used.txt",
+	"SOURCE" : "/home/ubuntu/smartparkingproject/smartparkingui/resources/resources.qrc",
+	"VERBOSITY" : 0
+}

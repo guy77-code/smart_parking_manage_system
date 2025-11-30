@@ -1,31 +1,47 @@
-2025/10/10 00:42:58 db.go:35: ❌ Failed to read config file: open config/config.yaml: no such file or directory
-2025/10/10 11:36:56 db.go:35: ❌ Failed to read config file: open config/config.yaml: no such file or directory
-2025/10/10 11:37:07 db.go:35: ❌ Failed to read config file: open config/config.yaml: no such file or directory
-2025/10/10 11:40:06 db.go:35: ❌ Failed to read config file: open config/config.yaml: no such file or directory
-2025/10/10 11:40:29 db.go:35: ❌ Failed to read config file: open config/config.yaml: no such file or directory
-2025/10/10 11:44:59 db.go:35: ❌ Failed to read config file: open config/config.yaml: no such file or directory
-2025/10/10 11:49:53 db.go:40: ❌ Failed to parse config file: yaml: line 11: could not find expected ':'
-2025/10/11 05:08:10 db.go:72: ❌ AutoMigrate 失败: Error 1824 (HY000): Failed to open the referenced table 'reservation_order'
-2025/10/11 05:10:56 db.go:72: ❌ AutoMigrate 失败: Error 1824 (HY000): Failed to open the referenced table 'user'
-2025/10/11 05:15:56 db.go:72: ❌ AutoMigrate 失败: Error 1824 (HY000): Failed to open the referenced table 'user'
-2025/10/11 06:11:18 db.go:61: ❌ 数据表自动迁移失败: migrate *model.User failed: Error 1824 (HY000): Failed to open the referenced table 'parking_record'
-2025/10/15 04:48:45 db.go:64: ❌ 数据表自动迁移失败: migrate *model.User failed: Error 1826 (HY000): Duplicate foreign key constraint name 'fk_parking_record_user'
-2025/10/15 04:52:54 db.go:64: ❌ 数据表自动迁移失败: migrate *model.User failed: Error 1826 (HY000): Duplicate foreign key constraint name 'fk_parking_record_user'
-2025/10/15 04:57:06 db.go:64: ❌ 数据表自动迁移失败: migrate *model.User failed: Error 1826 (HY000): Duplicate foreign key constraint name 'fk_parking_record_user'
-2025/10/15 04:57:21 db.go:64: ❌ 数据表自动迁移失败: migrate *model.User failed: Error 1826 (HY000): Duplicate foreign key constraint name 'fk_parking_record_user'
-2025/10/15 05:01:46 db.go:56: ❌ Failed to connect to MySQL: Error 1049 (42000): Unknown database 'smart_parking'
-2025/10/15 05:01:49 db.go:56: ❌ Failed to connect to MySQL: Error 1049 (42000): Unknown database 'smart_parking'
-2025/10/27 16:09:58 main.go:80: 🛑 收到停止信号，正在关闭服务器...
-2025/10/27 16:09:58 main.go:88: ✅ 服务器已关闭
-2025/10/27 16:10:04 main.go:80: 🛑 收到停止信号，正在关闭服务器...
-2025/10/27 16:10:04 main.go:88: ✅ 服务器已关闭
-2025/10/27 19:14:55 main.go:80: 🛑 收到停止信号，正在关闭服务器...
-2025/10/27 19:14:55 main.go:88: ✅ 服务器已关闭
-2025/10/27 22:12:11 main.go:80: 🛑 收到停止信号，正在关闭服务器...
-2025/10/27 22:12:11 main.go:88: ✅ 服务器已关闭
-2025/10/28 23:30:59 main.go:80: 🛑 收到停止信号，正在关闭服务器...
-2025/10/28 23:30:59 main.go:88: ✅ 服务器已关闭
-2025/10/29 15:50:56 main.go:80: 🛑 收到停止信号，正在关闭服务器...
-2025/10/29 15:50:56 main.go:88: ✅ 服务器已关闭
-2025/11/22 14:12:21 main.go:84: 🛑 收到停止信号，正在关闭服务器...
-2025/11/22 14:12:21 main.go:92: ✅ 服务器已关闭
+✅ 数据库连接池初始化完成，支持高并发访问
+[GIN-debug] [WARNING] Creating an Engine instance with the Logger and Recovery middleware already attached.
+
+[GIN-debug] [WARNING] Running in "debug" mode. Switch to "release" mode in production.
+ - using env:	export GIN_MODE=release
+ - using code:	gin.SetMode(gin.ReleaseMode)
+
+[GIN-debug] POST   /api/v1/register          --> smart_parking_backend/routers.InitRouter.Register.func2 (4 handlers)
+[GIN-debug] POST   /api/v1/send_code         --> smart_parking_backend/routers.InitRouter.SendLoginCode.func3 (4 handlers)
+[GIN-debug] POST   /api/v1/login             --> smart_parking_backend/routers.InitRouter.Login.func4 (4 handlers)
+[GIN-debug] GET    /api/v1/getpaymentinfo    --> smart_parking_backend/routers.InitRouter.GetUserPaymentRecords.func6 (5 handlers)
+[GIN-debug] POST   /admin/register           --> smart_parking_backend/internal/controller.AdminRegisterController (4 handlers)
+[GIN-debug] POST   /admin/login              --> smart_parking_backend/internal/controller.AdminLoginController (4 handlers)
+[GIN-debug] GET    /admin/occupancy          --> smart_parking_backend/internal/controller.ParkingSpaceOccupancyAnalysis (5 handlers)
+[GIN-debug] GET    /admin/violations         --> smart_parking_backend/internal/controller.ViolationAnalysis (5 handlers)
+[GIN-debug] GET    /admin/report             --> smart_parking_backend/internal/controller.GenerateReport (5 handlers)
+[GIN-debug] POST   /api/v2/addparkinglot     --> smart_parking_backend/internal/controller.AddParkingLot (4 handlers)
+[GIN-debug] GET    /api/v2/getparkinglots    --> smart_parking_backend/internal/controller.GetAllParkingLots (4 handlers)
+[GIN-debug] GET    /api/v2/getparkinglot/:id --> smart_parking_backend/internal/controller.GetParkingLotByID (4 handlers)
+[GIN-debug] POST   /api/v2/addparkingspace   --> smart_parking_backend/internal/controller.AddParkingSpace (4 handlers)
+[GIN-debug] PATCH  /api/v2/updatespacestatus/:id --> smart_parking_backend/internal/controller.UpdateSpaceStatus (4 handlers)
+[GIN-debug] GET    /api/v2/getspacesbylotid/:lot_id --> smart_parking_backend/internal/controller.GetSpacesByLotID (4 handlers)
+[GIN-debug] POST   /api/v3/addparkingspace   --> smart_parking_backend/internal/controller.AddParkingSpace (4 handlers)
+[GIN-debug] PATCH  /api/v3/updatespacestatus/:id --> smart_parking_backend/internal/controller.UpdateSpaceStatus (4 handlers)
+[GIN-debug] GET    /api/v3/getspacesbylotid/:lot_id --> smart_parking_backend/internal/controller.GetSpacesByLotID (4 handlers)
+[GIN-debug] POST   /api/v4/booking/create    --> smart_parking_backend/internal/booking.(*Handler).CreateBooking-fm (4 handlers)
+[GIN-debug] DELETE /api/v4/booking/cancel/:id --> smart_parking_backend/internal/booking.(*Handler).CancelBooking-fm (4 handlers)
+[GIN-debug] GET    /api/v4/booking/user      --> smart_parking_backend/internal/booking.(*Handler).GetUserBookings-fm (4 handlers)
+[GIN-debug] GET    /api/v4/booking/detail/:id --> smart_parking_backend/internal/booking.(*Handler).GetBookingDetail-fm (4 handlers)
+[GIN-debug] POST   /api/parking/entry        --> smart_parking_backend/internal/controller.VehicleEntry (4 handlers)
+[GIN-debug] POST   /api/parking/exit         --> smart_parking_backend/internal/controller.VehicleExit (4 handlers)
+[GIN-debug] GET    /api/parking/space-types  --> smart_parking_backend/internal/controller.GetParkingSpaceTypes (4 handlers)
+[GIN-debug] GET    /api/parking/lots/:lot_id/spaces --> smart_parking_backend/internal/controller.GetParkingLotSpaces (4 handlers)
+[GIN-debug] GET    /api/parking/:user_id/active-parking --> smart_parking_backend/internal/controller.GetUserActiveParkingRecords (4 handlers)
+[GIN-debug] GET    /api/parking/getlicense/:license_plate --> smart_parking_backend/internal/controller.GetVehicleByLicensePlate (4 handlers)
+[GIN-debug] GET    /api/parking/getparkinglotoccupancy/:lot_id --> smart_parking_backend/internal/controller.GetParkingLotOccupancy (4 handlers)
+[GIN-debug] POST   /api/violations/check     --> smart_parking_backend/internal/controller.CheckViolations (4 handlers)
+[GIN-debug] GET    /api/violations/checkmyself/:user_id --> smart_parking_backend/internal/controller.GetUserViolationHistory (4 handlers)
+[GIN-debug] POST   /api/payment/create       --> smart_parking_backend/internal/payment.(*Handler).CreatePaymentRedirectHandler-fm (4 handlers)
+[GIN-debug] POST   /api/payment/notify       --> smart_parking_backend/internal/payment.(*Handler).NotifyHandler-fm (4 handlers)
+[GIN-debug] POST   /api/violations/:violation_id/pay --> smart_parking_backend/internal/controller.PayViolationFine (4 handlers)
+🔍 检查服务器是否已成功启动...
+🔄 尝试在端口 :8080 启动 HTTP 服务器...
+✅ Smart Parking 后端服务已在端口 :8080 成功启动并正在运行
+exit status 1
+14:55 main.go:66: ❌ 服务器启动失败: listen tcp :8080: bind: address already in use
+2025/11/30 11:39:52 main.go:68: ❌ 服务器启动失败: listen tcp :8080: bind: address already in use

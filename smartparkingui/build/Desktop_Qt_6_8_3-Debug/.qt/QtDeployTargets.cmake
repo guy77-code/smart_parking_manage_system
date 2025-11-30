@@ -1,2 +1,2 @@
-set(__QT_DEPLOY_TARGET_smartparkingui_FILE /home/ubuntu/smartparkingproject/smartparkingui/build/Desktop_Qt_6_8_3-Debug/smartparkingui)
-set(__QT_DEPLOY_TARGET_smartparkingui_TYPE EXECUTABLE)
+set(__QT_DEPLOY_TARGET_SmartParkingUI_FILE /home/ubuntu/smartparkingproject/smartparkingui/build/Desktop_Qt_6_8_3-Debug/SmartParkingUI)
+set(__QT_DEPLOY_TARGET_SmartParkingUI_TYPE EXECUTABLE)

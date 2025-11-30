@@ -1,9 +1,9 @@
-/home/ubuntu/smartparkingproject/smartparkingui/build/Desktop_Qt_6_8_3-Debug/CMakeFiles/smartparkingui.dir
+/home/ubuntu/smartparkingproject/smartparkingui/build/Desktop_Qt_6_8_3-Debug/CMakeFiles/SmartParkingUI.dir
 /home/ubuntu/smartparkingproject/smartparkingui/build/Desktop_Qt_6_8_3-Debug/CMakeFiles/edit_cache.dir
 /home/ubuntu/smartparkingproject/smartparkingui/build/Desktop_Qt_6_8_3-Debug/CMakeFiles/rebuild_cache.dir
 /home/ubuntu/smartparkingproject/smartparkingui/build/Desktop_Qt_6_8_3-Debug/CMakeFiles/list_install_components.dir
 /home/ubuntu/smartparkingproject/smartparkingui/build/Desktop_Qt_6_8_3-Debug/CMakeFiles/install.dir
 /home/ubuntu/smartparkingproject/smartparkingui/build/Desktop_Qt_6_8_3-Debug/CMakeFiles/install/local.dir
 /home/ubuntu/smartparkingproject/smartparkingui/build/Desktop_Qt_6_8_3-Debug/CMakeFiles/install/strip.dir
-/home/ubuntu/smartparkingproject/smartparkingui/build/Desktop_Qt_6_8_3-Debug/CMakeFiles/smartparkingui_autogen_timestamp_deps.dir
-/home/ubuntu/smartparkingproject/smartparkingui/build/Desktop_Qt_6_8_3-Debug/CMakeFiles/smartparkingui_autogen.dir
+/home/ubuntu/smartparkingproject/smartparkingui/build/Desktop_Qt_6_8_3-Debug/CMakeFiles/SmartParkingUI_autogen_timestamp_deps.dir
+/home/ubuntu/smartparkingproject/smartparkingui/build/Desktop_Qt_6_8_3-Debug/CMakeFiles/SmartParkingUI_autogen.dir

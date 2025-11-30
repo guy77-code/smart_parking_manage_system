@@ -1,108 +1,92 @@
-cmake_minimum_required(VERSION 3.16)
+cmake_minimum_required(VERSION 3.21)
 
-project(smartparkingui VERSION 0.1 LANGUAGES CXX)
-
-set(CMAKE_AUTOUIC ON)
-set(CMAKE_AUTOMOC ON)
-set(CMAKE_AUTORCC ON)
+project(SmartParkingUI VERSION 1.0.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Widgets)
-find_package(Qt6 REQUIRED COMPONENTS Core Widgets Network)
-find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Widgets)
+set(CMAKE_AUTOMOC ON)
+set(CMAKE_AUTORCC ON)
+set(CMAKE_AUTOUIC ON)
 
-set(PROJECT_SOURCES
-        main.cpp
-        mainwindow.cpp
-        mainwindow.h
-        mainwindow.ui
+# Find Qt6 components
+find_package(Qt6 REQUIRED COMPONENTS Core Network Quick QuickControls2)
 
+# Set QML import path
+set(CMAKE_PREFIX_PATH ${CMAKE_PREFIX_PATH} "${CMAKE_CURRENT_SOURCE_DIR}")
 
-
-        networkmanager.h
-        networkmanager.cpp
+# Source files
+set(SOURCES
+    src/main.cpp
+    src/apiclient.cpp
+    src/authmanager.cpp
+    src/models/user.cpp
+    src/models/vehicle.cpp
+    src/models/parkingrecord.cpp
+    src/models/paymentrecord.cpp
+    src/models/reservationorder.cpp
+    src/models/violationrecord.cpp
+    src/utils/jsonhelper.cpp
 )
 
-if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
-    qt_add_executable(smartparkingui
-        MANUAL_FINALIZATION
-        ${PROJECT_SOURCES}
-        main.cpp
-        mainwindow.h mainwindow.cpp mainwindow.ui
-        userpage.h userpage.cpp userpage.ui
-        paymentwindow.h paymentwindow.cpp
-        historywindow.h historywindow.cpp
-        selectparkinglotdialog.h selectparkinglotdialog.cpp selectparkinglotdialog.ui
-        paymentwindow.ui
-        historywindow.ui
-        registerwindow.h registerwindow.cpp registerwindow.ui
-        bookingwindow.h bookingwindow.cpp bookingwindow.ui
-
-
-        reportpage.h reportpage.cpp reportpage.ui
-        systemadminpage.h systemadminpage.cpp systemadminpage.ui
-
-
-
-
-
-
-    )
-# Define target properties for Android with Qt 6 as:
-#    set_property(TARGET smartparkingui APPEND PROPERTY QT_ANDROID_PACKAGE_SOURCE_DIR
-#                 ${CMAKE_CURRENT_SOURCE_DIR}/android)
-# For more information, see https://doc.qt.io/qt-6/qt-add-executable.html#target-creation
-else()
-    if(ANDROID)
-        add_library(smartparkingui SHARED
-            ${PROJECT_SOURCES}
-        )
-    # Define properties for Android with Qt 5 after find_package() calls as:
-    #    set(ANDROID_PACKAGE_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/android")
-    else()
-        add_executable(smartparkingui
-            ${PROJECT_SOURCES}
-        )
-    endif()
-endif()
-
-target_link_libraries(smartparkingui PRIVATE
-    Qt${QT_VERSION_MAJOR}::Widgets
-    Qt${QT_VERSION_MAJOR}::Core
-    Qt${QT_VERSION_MAJOR}::Network
+# Header files
+set(HEADERS
+    include/apiclient.h
+    include/authmanager.h
+    include/models/user.h
+    include/models/vehicle.h
+    include/models/parkingrecord.h
+    include/models/paymentrecord.h
+    include/models/reservationorder.h
+    include/models/violationrecord.h
+    include/utils/jsonhelper.h
 )
 
-add_custom_command(
-    TARGET smartparkingui POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            ${CMAKE_CURRENT_SOURCE_DIR}/../smart_parking_backend/smart_parking_server
-            $<TARGET_FILE_DIR:smartparkingui>/
-    COMMENT "Copying backend server file"
-)
-# Qt for iOS sets MACOSX_BUNDLE_GUI_IDENTIFIER automatically since Qt 6.1.
-# If you are developing for iOS or macOS you should consider setting an
-# explicit, fixed bundle identifier manually though.
-if(${QT_VERSION} VERSION_LESS 6.1.0)
-  set(BUNDLE_ID_OPTION MACOSX_BUNDLE_GUI_IDENTIFIER com.example.smartparkingui)
-endif()
-
-set_target_properties(smartparkingui PROPERTIES
-    ${BUNDLE_ID_OPTION}
-    MACOSX_BUNDLE_BUNDLE_VERSION ${PROJECT_VERSION}
-    MACOSX_BUNDLE_SHORT_VERSION_STRING ${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}
-    MACOSX_BUNDLE TRUE
-    WIN32_EXECUTABLE TRUE
+# QML files
+set(QML_FILES
+    ui/main.qml
+    ui/LoginPage.qml
+    ui/UserMainPage.qml
+    ui/AdminMainPage.qml
+    ui/BookingPage.qml
+    ui/ParkingVisualizationPage.qml
+    ui/PaymentPage.qml
+    ui/ViolationPage.qml
+    ui/OrderHistoryPage.qml
+    ui/AdminDataPage.qml
 )
 
-include(GNUInstallDirs)
-install(TARGETS smartparkingui
+# Resources
+set(RESOURCES
+    resources.qrc
+)
+
+# Create executable
+add_executable(${PROJECT_NAME} ${SOURCES} ${HEADERS} ${QML_FILES} ${RESOURCES})
+
+# Set include directories
+target_include_directories(${PROJECT_NAME} PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/models
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/utils
+)
+
+# Link Qt6 libraries
+target_link_libraries(${PROJECT_NAME} PRIVATE
+    Qt6::Core
+    Qt6::Network
+    Qt6::Quick
+    Qt6::QuickControls2
+)
+
+# Set QML import path
+target_compile_definitions(${PROJECT_NAME} PRIVATE
+    QT_QML_DEBUG
+)
+
+# Install rules
+install(TARGETS ${PROJECT_NAME}
     BUNDLE DESTINATION .
-    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
-    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+    RUNTIME DESTINATION bin
 )
 
-if(QT_VERSION_MAJOR EQUAL 6)
-    qt_finalize_executable(smartparkingui)
-endif()

@@ -1,0 +1,9 @@
+/home/ubuntu/smartparkingproject/build/CMakeFiles/SmartParkingUI.dir
+/home/ubuntu/smartparkingproject/build/CMakeFiles/edit_cache.dir
+/home/ubuntu/smartparkingproject/build/CMakeFiles/rebuild_cache.dir
+/home/ubuntu/smartparkingproject/build/CMakeFiles/list_install_components.dir
+/home/ubuntu/smartparkingproject/build/CMakeFiles/install.dir
+/home/ubuntu/smartparkingproject/build/CMakeFiles/install/local.dir
+/home/ubuntu/smartparkingproject/build/CMakeFiles/install/strip.dir
+/home/ubuntu/smartparkingproject/build/CMakeFiles/SmartParkingUI_autogen_timestamp_deps.dir
+/home/ubuntu/smartparkingproject/build/CMakeFiles/SmartParkingUI_autogen.dir

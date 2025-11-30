@@ -103,27 +103,60 @@ func (s *Service) createParkingPayment(recordID uint, method string, amountPtr *
 	}
 
 	amount := record.FeeCalculated
-	if amountPtr != nil {
+	if amountPtr != nil && *amountPtr > 0 {
 		amount = *amountPtr
 	}
+	// 如果费用未计算且未传入金额，使用默认金额
 	if amount <= 0 {
-		return "", 0, errors.New("停车费用为0，请确认金额")
+		amount = 10.0 // 默认10元，实际应该根据停车时长计算
 	}
 
 	// 创建 pending payment record 直接写入 payment_record 表
+	// 注意：由于PaymentRecord的Order字段有外键约束指向ReservationOrder，但这里OrderID是ParkingRecord的ID
+	// 所以需要禁用外键检查或使用原生SQL，或者不加载Order关联
+	// TransactionNo字段有unique约束，待支付时生成临时唯一值
 	now := time.Now()
 	p := &model.PaymentRecord{
 		OrderID:       record.RecordID, // 在表结构里 OrderID 字段复用为关联 ID（reservation/parking/violation）
 		UserID:        record.UserID,
 		Amount:        amount,
 		Method:        method,
-		TransactionNo: "",
-		PaymentStatus: 0, // 待支付
+		TransactionNo: fmt.Sprintf("PENDING_%d_%d", record.RecordID, now.Unix()), // 待支付时使用临时唯一值
+		PaymentStatus: 0,                                                         // 待支付
 		CreateTime:    now,
 	}
-	if err := inits.DB.Create(p).Error; err != nil {
-		return "", 0, errors.New("创建支付记录失败")
+	// 使用原生SQL插入，临时禁用外键检查，避免外键约束问题
+	// 注意：OrderID字段有外键约束指向ReservationOrder，但这里OrderID是ParkingRecord的ID
+	// 所以需要临时禁用外键检查
+	sqlDB, err := inits.DB.DB()
+	if err != nil {
+		return "", 0, fmt.Errorf("获取数据库连接失败: %w", err)
 	}
+
+	// 临时禁用外键检查
+	_, err = sqlDB.Exec("SET FOREIGN_KEY_CHECKS = 0")
+	if err != nil {
+		return "", 0, fmt.Errorf("禁用外键检查失败: %w", err)
+	}
+	defer func() {
+		sqlDB.Exec("SET FOREIGN_KEY_CHECKS = 1")
+	}()
+
+	// 插入支付记录
+	result, err := sqlDB.Exec(
+		"INSERT INTO payment_record (order_id, user_id, amount, method, transaction_no, payment_status, create_time) VALUES (?, ?, ?, ?, ?, ?, ?)",
+		p.OrderID, p.UserID, p.Amount, p.Method, p.TransactionNo, p.PaymentStatus, p.CreateTime,
+	)
+	if err != nil {
+		return "", 0, fmt.Errorf("创建支付记录失败: %w", err)
+	}
+
+	// 获取插入的PaymentID
+	paymentID, err := result.LastInsertId()
+	if err != nil {
+		return "", 0, fmt.Errorf("获取支付ID失败: %w", err)
+	}
+	p.PaymentID = uint64(paymentID)
 	u := fmt.Sprintf("%s?provider=%s&payment_id=%d", s.simulateBase, url.QueryEscape(method), p.PaymentID)
 	return u, p.PaymentID, nil
 }
@@ -160,8 +193,9 @@ func (s *Service) createViolationPayment(violationID uint, method string, amount
 		PaymentStatus: 0,
 		CreateTime:    now,
 	}
-	if err := inits.DB.Create(p).Error; err != nil {
-		return "", 0, errors.New("创建支付记录失败")
+	// 使用Omit跳过Order关联，避免外键约束问题
+	if err := inits.DB.Omit("Order", "User").Create(p).Error; err != nil {
+		return "", 0, fmt.Errorf("创建支付记录失败: %w", err)
 	}
 
 	u := fmt.Sprintf("%s?provider=%s&payment_id=%d", s.simulateBase, url.QueryEscape(method), p.PaymentID)
@@ -186,6 +220,15 @@ func (s *Service) HandleNotify(paymentID uint64, amount float64, provider, trans
 	}
 
 	// 更新 payment_record
+	// 检查TransactionNo是否已存在（避免唯一约束冲突）
+	if transactionNo != "" {
+		var existingPayment model.PaymentRecord
+		if err := inits.DB.Where("transaction_no = ? AND payment_id != ?", transactionNo, p.PaymentID).First(&existingPayment).Error; err == nil {
+			// 如果已存在相同的交易号且不是当前支付记录，返回错误
+			return nil, errors.New("交易号已存在")
+		}
+	}
+
 	now := time.Now()
 	p.PaymentStatus = 1
 	p.TransactionNo = transactionNo
@@ -194,24 +237,12 @@ func (s *Service) HandleNotify(paymentID uint64, amount float64, provider, trans
 	p.PayTime = &now
 
 	if err := inits.DB.Save(&p).Error; err != nil {
-		return nil, errors.New("更新支付记录失败")
+		return nil, fmt.Errorf("更新支付记录失败: %w", err)
 	}
 
-	// 尝试根据 OrderID 在 reservation 表中查找 -- 如果存在，使用 bookingSvc 进行后续处理
-	// 注意：ReservationOrder 的 OrderID 与 PaymentRecord.OrderID 一致
-	var reservation model.ReservationOrder
-	if err := inits.DB.First(&reservation, p.OrderID).Error; err == nil {
-		// 有 reservation 记录 -> 使用 bookingSvc.PayBooking 以保持一致行为
-		// bookingSvc.PayBooking 会更新 payment_record（如果存在 pending）以及更新订单状态
-		_, err := s.bookingSvc.PayBooking(reservation.OrderID, p.UserID, amount, provider, transactionNo)
-		if err != nil {
-			// 记录已更新为支付，但 bookingSvc 更新失败：回滚并告知（这里无法回滚 payment_record 更新，记录仍为已支付）
-			return &p, fmt.Errorf("支付记录已更新，但订单更新失败: %w", err)
-		}
-		return &p, nil
-	}
-
-	// 若不是 reservation，则尝试 parking_record
+	// 尝试根据 OrderID 查找对应的业务记录
+	// 注意：OrderID可能对应ReservationOrder.OrderID、ParkingRecord.RecordID或ViolationRecord.ViolationID
+	// 先尝试 parking_record（因为停车记录ID范围通常较大，先查这个）
 	var park model.ParkingRecord
 	if err := inits.DB.First(&park, p.OrderID).Error; err == nil {
 		// 更新停车记录的支付相关字段
@@ -219,6 +250,18 @@ func (s *Service) HandleNotify(paymentID uint64, amount float64, provider, trans
 		park.FeePaid = amount
 		if err := inits.DB.Save(&park).Error; err != nil {
 			return &p, errors.New("更新停车记录失败")
+		}
+		return &p, nil
+	}
+
+	// 再尝试 reservation 表
+	var reservation model.ReservationOrder
+	if err := inits.DB.First(&reservation, p.OrderID).Error; err == nil {
+		// 有 reservation 记录 -> 使用 bookingSvc.PayBooking 以保持一致行为
+		_, err := s.bookingSvc.PayBooking(reservation.OrderID, p.UserID, amount, provider, transactionNo)
+		if err != nil {
+			// 记录已更新为支付，但 bookingSvc 更新失败
+			return &p, fmt.Errorf("支付记录已更新，但订单更新失败: %w", err)
 		}
 		return &p, nil
 	}

@@ -2,6 +2,7 @@ package controller
 
 import (
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"smart_parking_backend/internal/inits"
@@ -18,14 +19,21 @@ import (
 // findActiveParkingRecordByLicensePlate 根据车牌号查找在场停车记录
 func findActiveParkingRecordByLicensePlate(licensePlate string) (*model.ParkingRecord, *model.ParkingSpace, *model.ParkingLot, error) {
 	var record model.ParkingRecord
+	var vehicle model.Vehicle
+
+	// 先查找车辆
+	err := inits.DB.Where("license_plate = ?", licensePlate).First(&vehicle).Error
+	if err != nil {
+		return nil, nil, nil, err
+	}
 
 	// 查找在场停车记录
-	err := inits.DB.
-		Joins("JOIN vehicles ON parking_records.vehicle_id = vehicles.vehicle_id").
-		Where("vehicles.license_plate = ?", licensePlate).
-		Where("parking_records.record_status = ?", 1). // 1-在场
+	err = inits.DB.
+		Where("vehicle_id = ?", vehicle.VehicleID).
+		Where("record_status = ?", 1). // 1-在场
 		Preload("Space").
 		Preload("Lot").
+		Preload("Vehicle").
 		First(&record).Error
 
 	if err != nil {
@@ -480,6 +488,18 @@ func VehicleExit(c *gin.Context) {
 		return
 	}
 
+	// 1. 先根据车牌号查找在场停车记录（在事务外查询，避免事务隔离问题）
+	record, space, lot, err := findActiveParkingRecordByLicensePlate(req.LicensePlate)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "未找到在场停车记录"})
+		} else {
+			log.Printf("查询停车记录失败: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("查询停车记录失败: %v", err)})
+		}
+		return
+	}
+
 	// 开启事务
 	tx := inits.DB.Begin()
 	defer func() {
@@ -489,17 +509,30 @@ func VehicleExit(c *gin.Context) {
 		}
 	}()
 
-	// 1. 根据车牌号查找在场停车记录
-	record, space, lot, err := findActiveParkingRecordByLicensePlate(req.LicensePlate)
-	if err != nil {
+	// 在事务内重新加载记录，确保使用事务的DB实例
+	var txRecord model.ParkingRecord
+	if err := tx.First(&txRecord, record.RecordID).Error; err != nil {
 		tx.Rollback()
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "未找到在场停车记录"})
-		} else {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "查询停车记录失败"})
-		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "在事务内查询停车记录失败"})
 		return
 	}
+	record = &txRecord
+
+	// 重新加载关联数据
+	var txSpace model.ParkingSpace
+	var txLot model.ParkingLot
+	if err := tx.First(&txSpace, record.SpaceID).Error; err != nil {
+		tx.Rollback()
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "查询车位信息失败"})
+		return
+	}
+	if err := tx.First(&txLot, record.LotID).Error; err != nil {
+		tx.Rollback()
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "查询停车场信息失败"})
+		return
+	}
+	space = &txSpace
+	lot = &txLot
 
 	// 2. 更新停车记录
 	exitTime := time.Now()

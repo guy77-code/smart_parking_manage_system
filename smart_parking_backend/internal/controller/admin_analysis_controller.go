@@ -100,8 +100,8 @@ func getParkingOccupancyStats(lotID uint, startTime, endTime time.Time) (map[str
 	var reservedSpaces int64
 	reserveSubQuery := inits.DB.Model(&model.ReservationOrder{}).
 		Select("DISTINCT space_id").
-		Where("lot_id = ? AND start_time <= ? AND end_time >= ? AND status = 'active'",
-			lotID, endTime, startTime)
+		Where("lot_id = ? AND start_time <= ? AND end_time >= ? AND status = ?",
+			lotID, endTime, startTime, 1) // 1-已预订
 
 	err = inits.DB.Model(&model.ParkingSpace{}).
 		Where("lot_id = ? AND space_id IN (?)", lotID, reserveSubQuery).
@@ -223,8 +223,8 @@ func getViolationStats(lotID uint, startTime, endTime time.Time) (map[string]int
 	// 1. 统计总违规次数
 	var totalViolations int64
 	err := inits.DB.Model(&model.ViolationRecord{}).
-		Joins("JOIN parking_records ON violation_records.record_id = parking_records.record_id").
-		Where("parking_records.lot_id = ? AND violation_records.violation_time BETWEEN ? AND ?",
+		Joins("JOIN parking_record ON violation_record.record_id = parking_record.record_id").
+		Where("parking_record.lot_id = ? AND violation_record.violation_time BETWEEN ? AND ?",
 			lotID, startTime, endTime).
 		Count(&totalViolations).Error
 	if err != nil {
@@ -239,8 +239,8 @@ func getViolationStats(lotID uint, startTime, endTime time.Time) (map[string]int
 	}
 	err = inits.DB.Model(&model.ViolationRecord{}).
 		Select("violation_type, COUNT(*) as count").
-		Joins("JOIN parking_records ON violation_records.record_id = parking_records.record_id").
-		Where("parking_records.lot_id = ? AND violation_records.violation_time BETWEEN ? AND ?",
+		Joins("JOIN parking_record ON violation_record.record_id = parking_record.record_id").
+		Where("parking_record.lot_id = ? AND violation_record.violation_time BETWEEN ? AND ?",
 			lotID, startTime, endTime).
 		Group("violation_type").
 		Scan(&violationsByType).Error
@@ -256,8 +256,8 @@ func getViolationStats(lotID uint, startTime, endTime time.Time) (map[string]int
 	}
 	err = inits.DB.Model(&model.ViolationRecord{}).
 		Select("status, COUNT(*) as count").
-		Joins("JOIN parking_records ON violation_records.record_id = parking_records.record_id").
-		Where("parking_records.lot_id = ? AND violation_records.violation_time BETWEEN ? AND ?",
+		Joins("JOIN parking_record ON violation_record.record_id = parking_record.record_id").
+		Where("parking_record.lot_id = ? AND violation_record.violation_time BETWEEN ? AND ?",
 			lotID, startTime, endTime).
 		Group("status").
 		Scan(&violationsByStatus).Error
@@ -272,8 +272,8 @@ func getViolationStats(lotID uint, startTime, endTime time.Time) (map[string]int
 	}
 	err = inits.DB.Model(&model.ViolationRecord{}).
 		Select("COALESCE(SUM(fine_amount), 0) as total_fines").
-		Joins("JOIN parking_records ON violation_records.record_id = parking_records.record_id").
-		Where("parking_records.lot_id = ? AND violation_records.violation_time BETWEEN ? AND ?",
+		Joins("JOIN parking_record ON violation_record.record_id = parking_record.record_id").
+		Where("parking_record.lot_id = ? AND violation_record.violation_time BETWEEN ? AND ?",
 			lotID, startTime, endTime).
 		Scan(&totalFines).Error
 	if err != nil {
@@ -287,8 +287,8 @@ func getViolationStats(lotID uint, startTime, endTime time.Time) (map[string]int
 	}
 	err = inits.DB.Model(&model.ViolationRecord{}).
 		Select("COALESCE(SUM(fine_amount), 0) as collected_fines").
-		Joins("JOIN parking_records ON violation_records.record_id = parking_records.record_id").
-		Where("parking_records.lot_id = ? AND violation_records.violation_time BETWEEN ? AND ? AND violation_records.status = ?",
+		Joins("JOIN parking_record ON violation_record.record_id = parking_record.record_id").
+		Where("parking_record.lot_id = ? AND violation_record.violation_time BETWEEN ? AND ? AND violation_record.status = ?",
 			lotID, startTime, endTime, 1). // 状态1表示已处理
 		Scan(&collectedFines).Error
 	if err != nil {
@@ -323,8 +323,8 @@ func getViolationTrend(lotID uint, months int) ([]map[string]interface{}, error)
 
 		// 总违规数
 		err := inits.DB.Model(&model.ViolationRecord{}).
-			Joins("JOIN parking_records ON violation_records.record_id = parking_records.record_id").
-			Where("parking_records.lot_id = ? AND violation_records.violation_time BETWEEN ? AND ?",
+			Joins("JOIN parking_record ON violation_record.record_id = parking_record.record_id").
+			Where("parking_record.lot_id = ? AND violation_record.violation_time BETWEEN ? AND ?",
 				lotID, startTime, endTime).
 			Count(&monthlyStats.TotalViolations).Error
 		if err != nil {
@@ -333,8 +333,8 @@ func getViolationTrend(lotID uint, months int) ([]map[string]interface{}, error)
 
 		// 已处理数
 		err = inits.DB.Model(&model.ViolationRecord{}).
-			Joins("JOIN parking_records ON violation_records.record_id = parking_records.record_id").
-			Where("parking_records.lot_id = ? AND violation_records.violation_time BETWEEN ? AND ? AND violation_records.status = ?",
+			Joins("JOIN parking_record ON violation_record.record_id = parking_record.record_id").
+			Where("parking_record.lot_id = ? AND violation_record.violation_time BETWEEN ? AND ? AND violation_record.status = ?",
 				lotID, startTime, endTime, 1).
 			Count(&monthlyStats.ProcessedCount).Error
 		if err != nil {
@@ -344,8 +344,8 @@ func getViolationTrend(lotID uint, months int) ([]map[string]interface{}, error)
 		// 罚款总额
 		err = inits.DB.Model(&model.ViolationRecord{}).
 			Select("COALESCE(SUM(fine_amount), 0) as total_fines").
-			Joins("JOIN parking_records ON violation_records.record_id = parking_records.record_id").
-			Where("parking_records.lot_id = ? AND violation_records.violation_time BETWEEN ? AND ?",
+			Joins("JOIN parking_record ON violation_record.record_id = parking_record.record_id").
+			Where("parking_record.lot_id = ? AND violation_record.violation_time BETWEEN ? AND ?",
 				lotID, startTime, endTime).
 			Scan(&monthlyStats.TotalFines).Error
 		if err != nil {
@@ -511,22 +511,22 @@ func getParkingStatsForReport(lotID uint, startTime, endTime time.Time) (map[str
 	}
 	stats["avg_parking_hours"] = avgDuration.AvgDuration / 60
 
-	// 不同车辆类型的停车统计
-	var vehicleTypeStats []struct {
-		VehicleType string
-		Count       int64
+	// 不同车辆品牌的停车统计
+	var vehicleBrandStats []struct {
+		Brand string
+		Count int64
 	}
 	err = inits.DB.Model(&model.ParkingRecord{}).
-		Select("vehicles.vehicle_type, COUNT(*) as count").
-		Joins("JOIN vehicles ON parking_records.vehicle_id = vehicles.vehicle_id").
-		Where("parking_records.lot_id = ? AND parking_records.entry_time BETWEEN ? AND ?",
+		Select("vehicle.brand, COUNT(*) as count").
+		Joins("JOIN vehicle ON parking_record.vehicle_id = vehicle.vehicle_id").
+		Where("parking_record.lot_id = ? AND parking_record.entry_time BETWEEN ? AND ?",
 			lotID, startTime, endTime).
-		Group("vehicles.vehicle_type").
-		Scan(&vehicleTypeStats).Error
+		Group("vehicle.brand").
+		Scan(&vehicleBrandStats).Error
 	if err != nil {
 		return nil, err
 	}
-	stats["vehicle_type_distribution"] = vehicleTypeStats
+	stats["vehicle_brand_distribution"] = vehicleBrandStats
 
 	return stats, nil
 }
@@ -538,8 +538,8 @@ func getViolationStatsForReport(lotID uint, startTime, endTime time.Time) (map[s
 	// 总违规次数
 	var totalViolations int64
 	err := inits.DB.Model(&model.ViolationRecord{}).
-		Joins("JOIN parking_records ON violation_records.record_id = parking_records.record_id").
-		Where("parking_records.lot_id = ? AND violation_records.violation_time BETWEEN ? AND ?",
+		Joins("JOIN parking_record ON violation_record.record_id = parking_record.record_id").
+		Where("parking_record.lot_id = ? AND violation_record.violation_time BETWEEN ? AND ?",
 			lotID, startTime, endTime).
 		Count(&totalViolations).Error
 	if err != nil {
@@ -550,8 +550,8 @@ func getViolationStatsForReport(lotID uint, startTime, endTime time.Time) (map[s
 	// 违规处理率
 	var processedViolations int64
 	err = inits.DB.Model(&model.ViolationRecord{}).
-		Joins("JOIN parking_records ON violation_records.record_id = parking_records.record_id").
-		Where("parking_records.lot_id = ? AND violation_records.violation_time BETWEEN ? AND ? AND violation_records.status = ?",
+		Joins("JOIN parking_record ON violation_record.record_id = parking_record.record_id").
+		Where("parking_record.lot_id = ? AND violation_record.violation_time BETWEEN ? AND ? AND violation_record.status = ?",
 			lotID, startTime, endTime, 1).
 		Count(&processedViolations).Error
 	if err != nil {
@@ -570,8 +570,8 @@ func getViolationStatsForReport(lotID uint, startTime, endTime time.Time) (map[s
 			COALESCE(SUM(fine_amount), 0) as total_fines,
 			COALESCE(SUM(CASE WHEN status = 1 THEN fine_amount ELSE 0 END), 0) as collected_fines
 		`).
-		Joins("JOIN parking_records ON violation_records.record_id = parking_records.record_id").
-		Where("parking_records.lot_id = ? AND violation_records.violation_time BETWEEN ? AND ?",
+		Joins("JOIN parking_record ON violation_record.record_id = parking_record.record_id").
+		Where("parking_record.lot_id = ? AND violation_record.violation_time BETWEEN ? AND ?",
 			lotID, startTime, endTime).
 		Scan(&fineStats).Error
 	if err != nil {
@@ -607,8 +607,8 @@ func getRevenueStats(lotID uint, startTime, endTime time.Time) (map[string]inter
 	}
 	err = inits.DB.Model(&model.ViolationRecord{}).
 		Select("COALESCE(SUM(fine_amount), 0) as fine_income").
-		Joins("JOIN parking_records ON violation_records.record_id = parking_records.record_id").
-		Where("parking_records.lot_id = ? AND violation_records.violation_time BETWEEN ? AND ? AND violation_records.status = ?",
+		Joins("JOIN parking_record ON violation_record.record_id = parking_record.record_id").
+		Where("parking_record.lot_id = ? AND violation_record.violation_time BETWEEN ? AND ? AND violation_record.status = ?",
 			lotID, startTime, endTime, 1).
 		Scan(&fineIncome).Error
 	if err != nil {
@@ -679,9 +679,9 @@ func getPeakHoursAnalysis(lotID uint, startTime, endTime time.Time) ([]map[strin
 	}
 
 	err := inits.DB.Model(&model.ParkingRecord{}).
-		Select("EXTRACT(HOUR FROM entry_time) as hour, COUNT(*) as count").
+		Select("HOUR(entry_time) as hour, COUNT(*) as count").
 		Where("lot_id = ? AND entry_time BETWEEN ? AND ?", lotID, startTime, endTime).
-		Group("EXTRACT(HOUR FROM entry_time)").
+		Group("HOUR(entry_time)").
 		Order("hour").
 		Scan(&hourlyStats).Error
 	if err != nil {
@@ -711,11 +711,11 @@ func getMonthlyRevenueTrend(lotID uint, startTime, endTime time.Time) ([]map[str
 
 	err := inits.DB.Model(&model.ParkingRecord{}).
 		Select(`
-			TO_CHAR(entry_time, 'YYYY-MM') as year_month,
+			DATE_FORMAT(entry_time, '%Y-%m') as year_month,
 			COALESCE(SUM(fee_paid), 0) as income
 		`).
 		Where("lot_id = ? AND entry_time BETWEEN ? AND ?", lotID, startTime, endTime).
-		Group("TO_CHAR(entry_time, 'YYYY-MM')").
+		Group("DATE_FORMAT(entry_time, '%Y-%m')").
 		Order("year_month").
 		Scan(&monthlyStats).Error
 	if err != nil {

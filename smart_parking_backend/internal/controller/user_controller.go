@@ -303,9 +303,9 @@ func AdminRegisterController(c *gin.Context) {
 		return
 	}
 
-	// 检查手机号是否已注册
+	// 检查手机号是否已注册（同时检查username和phone_number字段）
 	var existingAdmin model.Admins
-	result := inits.DB.Where("username = ?", req.Phone).First(&existingAdmin)
+	result := inits.DB.Where("username = ? OR phone_number = ?", req.Phone, req.Phone).First(&existingAdmin)
 	if result.Error == nil {
 		c.JSON(http.StatusConflict, gin.H{"error": "手机号已注册"})
 		return
@@ -327,6 +327,7 @@ func AdminRegisterController(c *gin.Context) {
 	// 创建管理员
 	admin := model.Admins{
 		Username:     req.Phone,
+		PhoneNumber:  req.Phone, // 同时设置手机号字段
 		PasswordHash: string(hashedPassword),
 		Role:         role,
 		LotID:        req.LotID,
@@ -365,9 +366,9 @@ func AdminLoginController(c *gin.Context) {
 		return
 	}
 
-	// 查找管理员 - 修改为使用phone_number字段查询
+	// 查找管理员 - 同时支持username和phone_number字段查询（兼容性）
 	var admin model.Admins
-	result := inits.DB.Where("phone_number = ?", req.Phone).First(&admin)
+	result := inits.DB.Where("username = ? OR phone_number = ?", req.Phone, req.Phone).First(&admin)
 	if result.Error != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "用户不存在"})
 		return

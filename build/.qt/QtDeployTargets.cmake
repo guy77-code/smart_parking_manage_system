@@ -1,0 +1,2 @@
+set(__QT_DEPLOY_TARGET_SmartParkingUI_FILE /home/ubuntu/smartparkingproject/build/SmartParkingUI)
+set(__QT_DEPLOY_TARGET_SmartParkingUI_TYPE EXECUTABLE)

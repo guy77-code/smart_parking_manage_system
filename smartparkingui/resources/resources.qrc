@@ -1,0 +1,15 @@
+<RCC>
+    <qresource prefix="/">
+        <file alias="ui/main.qml">../ui/main.qml</file>
+        <file alias="ui/LoginPage.qml">../ui/LoginPage.qml</file>
+        <file alias="ui/UserMainPage.qml">../ui/UserMainPage.qml</file>
+        <file alias="ui/AdminMainPage.qml">../ui/AdminMainPage.qml</file>
+        <file alias="ui/BookingPage.qml">../ui/BookingPage.qml</file>
+        <file alias="ui/ParkingVisualizationPage.qml">../ui/ParkingVisualizationPage.qml</file>
+        <file alias="ui/PaymentPage.qml">../ui/PaymentPage.qml</file>
+        <file alias="ui/ViolationPage.qml">../ui/ViolationPage.qml</file>
+        <file alias="ui/OrderHistoryPage.qml">../ui/OrderHistoryPage.qml</file>
+        <file alias="ui/AdminDataPage.qml">../ui/AdminDataPage.qml</file>
+    </qresource>
+</RCC>
+

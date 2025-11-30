@@ -1,0 +1,15 @@
+<RCC>
+    <qresource prefix="/">
+        <file>ui/main.qml</file>
+        <file>ui/LoginPage.qml</file>
+        <file>ui/UserMainPage.qml</file>
+        <file>ui/AdminMainPage.qml</file>
+        <file>ui/BookingPage.qml</file>
+        <file>ui/ParkingVisualizationPage.qml</file>
+        <file>ui/PaymentPage.qml</file>
+        <file>ui/ViolationPage.qml</file>
+        <file>ui/OrderHistoryPage.qml</file>
+        <file>ui/AdminDataPage.qml</file>
+    </qresource>
+</RCC>
+

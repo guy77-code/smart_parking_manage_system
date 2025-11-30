@@ -18,6 +18,8 @@ import (
 	"time"
 )
 
+
+//lisi2024     12345678 clienttest
 func main() {
 	// 初始化日志
 	logger.InitLogger()
