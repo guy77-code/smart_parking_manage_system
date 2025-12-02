@@ -74,8 +74,15 @@ Page {
                                     text: "停车"
                                     visible: parkingStatusText.text === "当前暂无车辆在使用停车场"
                                     onClicked: {
-                                        // Navigate to parking entry
-                                        stackView.push(parkingEntryPage)
+                                        // 导航到预订/停车页面（简化为预订入口）
+                                        if (stackView) {
+                                            stackView.push(Qt.resolvedUrl("BookingPage.qml"), {
+                                                               userId: userId,
+                                                               stackView: stackView
+                                                           })
+                                        } else {
+                                            console.log("stackView is null, cannot navigate to BookingPage")
+                                        }
                                     }
                                 }
 
@@ -83,8 +90,12 @@ Page {
                                     text: "离开"
                                     visible: parkingStatusText.text !== "当前暂无车辆在使用停车场" && parkingStatusText.text !== "加载中..."
                                     onClicked: {
+                                        console.log("Vehicle exit clicked, license plate:", currentLicensePlate)
                                         if (currentLicensePlate.length > 0) {
+                                            console.log("Calling vehicleExit with:", currentLicensePlate)
                                             apiClient.vehicleExit(currentLicensePlate)
+                                        } else {
+                                            console.log("License plate is empty, cannot exit")
                                         }
                                     }
                                 }
@@ -116,7 +127,14 @@ Page {
                         Button {
                             text: "新建预订"
                             onClicked: {
-                                stackView.push(bookingPage)
+                                if (stackView) {
+                                    stackView.push(Qt.resolvedUrl("BookingPage.qml"), {
+                                                       userId: userId,
+                                                       stackView: stackView
+                                                   })
+                                } else {
+                                    console.log("stackView is null, cannot navigate to BookingPage")
+                                }
                             }
                         }
                     }
@@ -236,11 +254,16 @@ Page {
                     visible: model.paymentStatus === 0
                     onClicked: {
                         // Navigate to payment page
-                        stackView.push(paymentPage, {
-                            orderId: model.orderId,
-                            type: "parking",
-                            amount: model.amount
-                        })
+                        if (stackView) {
+                            stackView.push(Qt.resolvedUrl("PaymentPage.qml"), {
+                                               orderId: model.orderId,
+                                               type: "parking",
+                                               amount: model.amount,
+                                               stackView: stackView
+                                           })
+                        } else {
+                            console.log("stackView is null, cannot navigate to PaymentPage")
+                        }
                     }
                 }
             }
@@ -310,40 +333,189 @@ Page {
         target: apiClient
 
         function onRequestFinished(response) {
-            if (response.hasOwnProperty("error")) {
+            var url = response.url || ""
+            console.log("Request finished, URL:", url)
+
+            // 统一错误处理（包括 HTTP 非 2xx 和网络层错误）
+            var httpStatus = response.http_status !== undefined ? response.http_status : 200
+            if (response.hasOwnProperty("error") && httpStatus !== 404) {
                 console.log("Error:", response.error)
+                // 对于停车状态，404 表示无在场记录，不当作错误
+                if (url.indexOf("/active-parking") < 0) {
+                    return
+                }
+            }
+
+            // Handle active parking records response
+            if (url.indexOf("/active-parking") >= 0) {
+                console.log("Active parking records response:", JSON.stringify(response))
+
+                // Handle parking records data
+                var data = response.data || []
+                if (Array.isArray(data) && data.length > 0) {
+                    var record = data[0]
+                    console.log("Parking record:", JSON.stringify(record))
+
+                    // 尽可能鲁棒地提取车牌号
+                    var licensePlate = ""
+                    if (record.vehicle) {
+                        licensePlate = record.vehicle.license_plate || record.vehicle.licensePlate || ""
+                        if (!licensePlate) {
+                            // 在 vehicle 对象里兜底查找包含 "license" 的字段
+                            for (var vk in record.vehicle) {
+                                if (typeof record.vehicle[vk] === "string" && vk.toLowerCase().indexOf("license") >= 0) {
+                                    licensePlate = record.vehicle[vk]
+                                    break
+                                }
+                            }
+                        }
+                    }
+                    // 也检查是否直接在 record 中带有车牌字段
+                    if (!licensePlate && record.license_plate) {
+                        licensePlate = record.license_plate
+                    }
+                    if (!licensePlate && record.licensePlate) {
+                        licensePlate = record.licensePlate
+                    }
+                    if (!licensePlate) {
+                        // 再兜底一层：在 record 所有字段中搜索类似车牌的字段
+                        for (var rk in record) {
+                            if (typeof record[rk] === "string" && rk.toLowerCase().indexOf("license") >= 0) {
+                                licensePlate = record[rk]
+                                break
+                            }
+                        }
+                    }
+
+                    console.log("Extracted license plate:", licensePlate)
+
+                    var lotName = ""
+                    if (record.lot) {
+                        lotName = record.lot.name || record.lot.lot_name || ""
+                    }
+                    if (!lotName) {
+                        lotName = record.lot_name || ""
+                    }
+
+                    var entryTime = record.entry_time || record.entryTime || ""
+
+                    var statusText = "当前有车辆停在停车场"
+                    var infoText = "车牌号: " + (licensePlate || "未知") + "\n" +
+                                  "停车场: " + (lotName || "未知") + "\n" +
+                                  "入场时间: " + (entryTime || "未知")
+                    parkingStatusText.text = statusText
+                    parkingInfoText.text = infoText
+                    currentLicensePlate = licensePlate || ""
+                    console.log("Set currentLicensePlate to:", currentLicensePlate)
+                } else {
+                    // No active parking records
+                    console.log("No active parking records")
+                    parkingStatusText.text = "当前暂无车辆在使用停车场"
+                    parkingInfoText.text = ""
+                    currentLicensePlate = ""
+                }
                 return
             }
 
-            // Handle different response types
-            if (response.hasOwnProperty("data") && Array.isArray(response.data)) {
-                // Handle array responses
-                if (response.data.length > 0 && response.data[0].hasOwnProperty("record_id")) {
-                    // Parking records
-                    var record = response.data[0]
-                    var statusText = "当前有车辆停在停车场"
-                    var infoText = "车牌号: " + (record.vehicle?.license_plate || "") + "\n" +
-                                  "停车场: " + (record.lot?.name || "") + "\n" +
-                                  "入场时间: " + (record.entry_time || "")
-                    parkingStatusText.text = statusText
-                    parkingInfoText.text = infoText
-                    currentLicensePlate = record.vehicle?.license_plate || ""
+            // Handle vehicle exit response
+            if (url.indexOf("/api/parking/exit") >= 0) {
+                if (response.hasOwnProperty("error")) {
+                    console.log("Vehicle exit error:", response.error)
+                    return
                 }
+                // Vehicle exit successful, refresh parking status
+                parkingStatusText.text = "当前暂无车辆在使用停车场"
+                parkingInfoText.text = ""
+                currentLicensePlate = ""
+                // Reload parking status
+                loadParkingStatus()
+                return
             }
+
+            // Handle booking/user response
+            if (url.indexOf("/api/v4/booking/user") >= 0) {
+                bookingModel.clear()
+                var data = response.data || []
+                if (Array.isArray(data)) {
+                    for (var i = 0; i < data.length; i++) {
+                        var record = data[i]
+                        // Filter out null values and create clean record
+                        if (record && typeof record === 'object') {
+                            var cleanRecord = {}
+                            for (var key in record) {
+                                if (record[key] !== null && record[key] !== undefined) {
+                                    cleanRecord[key] = record[key]
+                                } else {
+                                    // Set default values for null fields
+                                    if (key === 'status') cleanRecord[key] = 0
+                                    else if (key === 'reservationCode') cleanRecord[key] = ""
+                                    else if (key === 'startTime') cleanRecord[key] = ""
+                                    else if (key === 'endTime') cleanRecord[key] = ""
+                                    else cleanRecord[key] = ""
+                                }
+                            }
+                            bookingModel.append(cleanRecord)
+                        }
+                    }
+                }
+                return
+            }
+
         }
 
         function onActiveParkingRecordsReceived(records) {
-            bookingModel.clear()
-            for (var i = 0; i < records.length; i++) {
-                bookingModel.append(records[i])
-            }
+            // This is for parking records, not bookings
+            // Parking records are handled in onRequestFinished
         }
 
         function onPaymentRecordsReceived(response) {
             paymentModel.clear()
             var records = response.records || []
             for (var i = 0; i < records.length; i++) {
-                paymentModel.append(records[i])
+                var record = records[i]
+                // Filter out null values and create clean record
+                if (record && typeof record === 'object') {
+                    var cleanRecord = {}
+                    for (var key in record) {
+                        if (record[key] !== null && record[key] !== undefined) {
+                            cleanRecord[key] = record[key]
+                        } else {
+                            // Set default values for null fields
+                            if (key === 'orderId') cleanRecord[key] = 0
+                            else if (key === 'amount') cleanRecord[key] = 0
+                            else if (key === 'paymentStatus') cleanRecord[key] = 0
+                            else cleanRecord[key] = ""
+                        }
+                    }
+                    paymentModel.append(cleanRecord)
+                }
+            }
+        }
+
+        function onViolationsReceived(response) {
+            violationModel.clear()
+            var data = response.data || []
+            if (Array.isArray(data)) {
+                for (var i = 0; i < data.length; i++) {
+                    var record = data[i]
+                    // Filter out null values and create clean record
+                    if (record && typeof record === 'object') {
+                        var cleanRecord = {}
+                        for (var key in record) {
+                            if (record[key] !== null && record[key] !== undefined) {
+                                cleanRecord[key] = record[key]
+                            } else {
+                                // Set default values for null fields
+                                if (key === 'violationId') cleanRecord[key] = 0
+                                else if (key === 'fineAmount') cleanRecord[key] = 0
+                                else if (key === 'status') cleanRecord[key] = 0
+                                else if (key === 'violationType') cleanRecord[key] = ""
+                                else cleanRecord[key] = ""
+                            }
+                        }
+                        violationModel.append(cleanRecord)
+                    }
+                }
             }
         }
     }

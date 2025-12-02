@@ -13,6 +13,38 @@ ApplicationWindow {
     property int currentUserId: 0
     property string currentUserType: ""
 
+    // 全局窗口控制栏（最小化 / 关闭），在所有页面顶部显示
+    header: ToolBar {
+        RowLayout {
+            anchors.fill: parent
+
+            Text {
+                text: "智能停车系统"
+                font.pixelSize: 16
+                Layout.alignment: Qt.AlignVCenter | Qt.AlignLeft
+                leftPadding: 8
+            }
+
+            Item { Layout.fillWidth: true }
+
+            // 最小化按钮
+            Button {
+                text: "—"
+                width: 40
+                Layout.alignment: Qt.AlignVCenter | Qt.AlignRight
+                onClicked: window.showMinimized()
+            }
+
+            // 关闭按钮
+            Button {
+                text: "×"
+                width: 40
+                Layout.alignment: Qt.AlignVCenter | Qt.AlignRight
+                onClicked: Qt.quit()
+            }
+        }
+    }
+
     StackView {
         id: stackView
         anchors.fill: parent
@@ -21,9 +53,9 @@ ApplicationWindow {
         Component {
             id: loginPage
             LoginPage {
-                onLoginSuccess: {
-                    currentUserId = userId
-                    currentUserType = userType
+                onLoginSuccess: function(userId, userType) {
+                    window.currentUserId = userId
+                    window.currentUserType = userType
                     if (userType === "user") {
                         var page = userMainPage.createObject(stackView)
                         page.stackView = stackView
@@ -41,7 +73,6 @@ ApplicationWindow {
             id: userMainPage
             UserMainPage {
                 userId: window.currentUserId
-                stackView: stackView
                 onLogout: {
                     authManager.clearAuth()
                     stackView.pop(null)

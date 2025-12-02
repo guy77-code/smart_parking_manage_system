@@ -257,6 +257,26 @@ void ApiClient::vehicleExit(const QString &licensePlate)
     makeRequest("POST", "/api/parking/exit", data);
 }
 
+// Admin parking lot management
+void ApiClient::addParkingLot(const QString &name,
+                              const QString &address,
+                              int totalLevels,
+                              int totalSpaces,
+                              double hourlyRate,
+                              int status,
+                              const QString &description)
+{
+    QJsonObject data;
+    data["name"] = name;
+    data["address"] = address;
+    data["total_levels"] = totalLevels;
+    data["total_spaces"] = totalSpaces;
+    data["hourly_rate"] = hourlyRate;
+    data["status"] = status;
+    data["description"] = description;
+    makeRequest("POST", "/api/v2/addparkinglot", data);
+}
+
 // Booking APIs
 void ApiClient::createBooking(int userId, int vehicleId, int lotId, const QString &startTime, const QString &endTime)
 {

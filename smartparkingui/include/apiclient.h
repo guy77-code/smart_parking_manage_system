@@ -40,6 +40,15 @@ public:
     Q_INVOKABLE void vehicleEntry(const QString &licensePlate, const QString &spaceType = "");
     Q_INVOKABLE void vehicleExit(const QString &licensePlate);
 
+    // Admin parking lot management
+    Q_INVOKABLE void addParkingLot(const QString &name,
+                                   const QString &address,
+                                   int totalLevels,
+                                   int totalSpaces,
+                                   double hourlyRate,
+                                   int status,
+                                   const QString &description);
+
     // Booking APIs
     Q_INVOKABLE void createBooking(int userId, int vehicleId, int lotId, const QString &startTime, const QString &endTime);
     Q_INVOKABLE void cancelBooking(int orderId);

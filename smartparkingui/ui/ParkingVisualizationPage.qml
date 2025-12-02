@@ -16,6 +16,22 @@ Page {
         anchors.margins: 20
         spacing: 20
 
+        // 返回按钮
+        RowLayout {
+            Layout.fillWidth: true
+            Button {
+                text: "返回"
+                onClicked: {
+                    if (stackView) {
+                        stackView.pop()
+                    } else {
+                        console.log("stackView is null, cannot pop ParkingVisualizationPage")
+                    }
+                }
+            }
+            Item { Layout.fillWidth: true }
+        }
+
         // Level selector
         RowLayout {
             Layout.fillWidth: true

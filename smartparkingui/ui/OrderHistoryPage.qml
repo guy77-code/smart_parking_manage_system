@@ -14,6 +14,21 @@ Page {
         anchors.margins: 20
         spacing: 20
 
+        RowLayout {
+            Layout.fillWidth: true
+            Button {
+                text: "返回"
+                onClicked: {
+                    if (stackView) {
+                        stackView.pop()
+                    } else {
+                        console.log("stackView is null, cannot pop OrderHistoryPage")
+                    }
+                }
+            }
+            Item { Layout.fillWidth: true }
+        }
+
         Text {
             text: "订单历史"
             font.pixelSize: 24

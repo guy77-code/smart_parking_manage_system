@@ -14,6 +14,21 @@ Page {
         anchors.margins: 20
         spacing: 20
 
+        RowLayout {
+            Layout.fillWidth: true
+            Button {
+                text: "返回"
+                onClicked: {
+                    // 违规记录页目前一般从用户主页面的 Tab 打开，
+                    // 如后续通过 StackView 独立打开，可在这里接入 stackView.pop()
+                    Qt.callLater(function() {
+                        // 占位：无需返回时不做任何操作
+                    })
+                }
+            }
+            Item { Layout.fillWidth: true }
+        }
+
         Text {
             text: "违规记录"
             font.pixelSize: 24

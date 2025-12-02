@@ -12,17 +12,24 @@ import (
 
 // ParkingSpaceOccupancyAnalysis 分析特定时间段内停车场车位的占用情况
 func ParkingSpaceOccupancyAnalysis(c *gin.Context) {
-	// 直接从中间件设置的上下文中获取管理员信息
-	lotID, exists := c.Get("lot_id")
-	if !exists || lotID == nil {
-		c.JSON(http.StatusForbidden, gin.H{"error": "无权限查询或未分配停车场"})
-		return
+	// 从中间件上下文中获取管理员角色和停车场信息
+	roleVal, _ := c.Get("role")
+	role, _ := roleVal.(string)
+
+	var lotIDUint uint
+	if lotID, exists := c.Get("lot_id"); exists && lotID != nil {
+		if v, ok := lotID.(uint); ok {
+			lotIDUint = v
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "停车场ID格式错误"})
+			return
+		}
 	}
 
-	// 类型断言，确保lotID是uint类型
-	lotIDUint, ok := lotID.(uint)
-	if !ok {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "停车场ID格式错误"})
+	// 如果是系统管理员且未绑定具体停车场，则不允许直接访问该接口
+	//（当前实现仅支持针对单个停车场的分析）
+	if lotIDUint == 0 || role != "lot_admin" {
+		c.JSON(http.StatusForbidden, gin.H{"error": "无权限查询或未分配停车场"})
 		return
 	}
 
@@ -158,6 +165,9 @@ func getParkingOccupancyStats(lotID uint, startTime, endTime time.Time) (map[str
 // ViolationAnalysis 统计和分析违规停车行为的数量及其处理情况
 func ViolationAnalysis(c *gin.Context) {
 	// 直接从中间件设置的上下文中获取管理员信息
+	roleVal, _ := c.Get("role")
+	role, _ := roleVal.(string)
+
 	lotID, exists := c.Get("lot_id")
 	if !exists || lotID == nil {
 		c.JSON(http.StatusForbidden, gin.H{"error": "无权限查询或未分配停车场"})
@@ -168,6 +178,12 @@ func ViolationAnalysis(c *gin.Context) {
 	lotIDUint, ok := lotID.(uint)
 	if !ok {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "停车场ID格式错误"})
+		return
+	}
+
+	// 违规分析同样只允许停车场管理员查询自己停车场的数据
+	if role != "lot_admin" {
+		c.JSON(http.StatusForbidden, gin.H{"error": "无权限查询或未分配停车场"})
 		return
 	}
 
@@ -367,6 +383,9 @@ func getViolationTrend(lotID uint, months int) ([]map[string]interface{}, error)
 // GenerateReport 生成月度报告和年度报告
 func GenerateReport(c *gin.Context) {
 	// 直接从中间件设置的上下文中获取管理员信息
+	roleVal, _ := c.Get("role")
+	role, _ := roleVal.(string)
+
 	lotID, exists := c.Get("lot_id")
 	if !exists || lotID == nil {
 		c.JSON(http.StatusForbidden, gin.H{"error": "无权限查询或未分配停车场"})
@@ -377,6 +396,12 @@ func GenerateReport(c *gin.Context) {
 	lotIDUint, ok := lotID.(uint)
 	if !ok {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "停车场ID格式错误"})
+		return
+	}
+
+	// 报表生成同样只允许停车场管理员查看自己停车场的数据
+	if role != "lot_admin" {
+		c.JSON(http.StatusForbidden, gin.H{"error": "无权限查询或未分配停车场"})
 		return
 	}
 
