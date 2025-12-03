@@ -48,6 +48,12 @@ public:
                                    double hourlyRate,
                                    int status,
                                    const QString &description);
+    Q_INVOKABLE void deleteParkingLot(int lotId);
+
+    // Parking space management
+    Q_INVOKABLE void addParkingSpace(int lotId, int level, const QString &spaceNumber, const QString &spaceType, int status);
+    Q_INVOKABLE void updateParkingSpaceStatus(int spaceId, int status, int isOccupied, int isReserved);
+    Q_INVOKABLE void deleteParkingSpace(int spaceId);
 
     // Booking APIs
     Q_INVOKABLE void createBooking(int userId, int vehicleId, int lotId, const QString &startTime, const QString &endTime);

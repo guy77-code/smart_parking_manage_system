@@ -5,12 +5,13 @@ import SmartParking 1.0
 
 Page {
     property var stackView: null
-    id: bookingPage
-    title: "车位预订"
+    id: parkingEntryPage
+    title: "车辆入场"
 
     property int userId: 0
     property int selectedLotId: 0
     property int selectedVehicleId: 0
+    property string selectedLicensePlate: ""
 
     ColumnLayout {
         anchors.fill: parent
@@ -18,7 +19,7 @@ Page {
         spacing: 20
 
         Text {
-            text: "新建预订"
+            text: "车辆入场"
             font.pixelSize: 24
             font.bold: true
         }
@@ -41,13 +42,9 @@ Page {
                 onCurrentIndexChanged: {
                     if (currentIndex >= 0 && currentIndex < model.count) {
                         var item = model.get(currentIndex)
-                        // 后端字段多为 snake_case：lot_id
                         var lotIdValue = item.lot_id !== undefined ? item.lot_id :
                                          (item.lotId !== undefined ? item.lotId : 0)
                         selectedLotId = lotIdValue
-                        if (selectedLotId > 0) {
-                            apiClient.getParkingSpaces(selectedLotId)
-                        }
                     } else {
                         selectedLotId = 0
                     }
@@ -76,75 +73,39 @@ Page {
                         var vehicleIdValue = v.vehicle_id !== undefined ? v.vehicle_id :
                                              (v.vehicleId !== undefined ? v.vehicleId : 0)
                         selectedVehicleId = vehicleIdValue
-                        console.log("Selected vehicle ID:", vehicleIdValue, "License:", v.licensePlate || v.license_plate)
+                        selectedLicensePlate = v.licensePlate || v.license_plate || ""
+                        console.log("Selected vehicle ID:", vehicleIdValue, "License:", selectedLicensePlate)
                     } else {
                         selectedVehicleId = 0
+                        selectedLicensePlate = ""
                     }
                 }
             }
 
-            // 当无车辆可选时给出明显提示
             Text {
                 visible: vehicleModel.count === 0
-                text: "无可用车辆，请在注册时添加车辆或联系管理员添加车辆后再预订。"
+                text: "无可用车辆，请在注册时添加车辆或联系管理员添加车辆。"
                 font.pixelSize: 12
                 color: "red"
                 wrapMode: Text.Wrap
             }
         }
 
-        // Start time
-        RowLayout {
+        // Space type selection (optional)
+        ColumnLayout {
             Layout.fillWidth: true
-            Text { text: "开始时间:" }
-            TextField {
-                id: startTimeField
-                Layout.fillWidth: true
-                placeholderText: "2025-01-02T10:00:00Z"
+            spacing: 4
+
+            Text {
+                text: "车位类型（可选）"
+                font.pixelSize: 14
             }
-        }
 
-        // End time
-        RowLayout {
-            Layout.fillWidth: true
-            Text { text: "结束时间:" }
-            TextField {
-                id: endTimeField
+            ComboBox {
+                id: spaceTypeComboBox
                 Layout.fillWidth: true
-                placeholderText: "2025-01-02T12:00:00Z"
-            }
-        }
-
-        // Space visualization button
-        Button {
-            Layout.fillWidth: true
-            text: "查看车位可视化"
-            onClicked: {
-                var lotIdToUse = selectedLotId
-
-                // 如果还未显式选择，但已有停车场列表，则默认使用当前/第一个
-                if (lotIdToUse <= 0 && parkingLotModel.count > 0) {
-                    var useIndex = lotComboBox.currentIndex >= 0 ? lotComboBox.currentIndex : 0
-                    var item = parkingLotModel.get(useIndex)
-                    var autoLotId = item.lot_id !== undefined ? item.lot_id :
-                                    (item.lotId !== undefined ? item.lotId : 0)
-                    lotIdToUse = autoLotId
-                    selectedLotId = autoLotId
-                }
-
-                if (lotIdToUse <= 0) {
-                    console.log("No parking lot available, cannot open visualization")
-                    return
-                }
-                if (stackView) {
-                    // 通过 URL 创建页面，避免依赖外部 Component id
-                    stackView.push(Qt.resolvedUrl("ParkingVisualizationPage.qml"), {
-                                       lotId: lotIdToUse,
-                                       stackView: stackView
-                                   })
-                } else {
-                    console.log("stackView is null, cannot push ParkingVisualizationPage")
-                }
+                model: ["普通", "充电桩", "残疾人", "VIP"]
+                currentIndex: 0
             }
         }
 
@@ -153,10 +114,11 @@ Page {
         // Submit button
         Button {
             Layout.fillWidth: true
-            text: "提交预订"
-            enabled: selectedLotId > 0 && selectedVehicleId > 0 && startTimeField.text.length > 0 && endTimeField.text.length > 0
+            text: "确认入场"
+            enabled: selectedLotId > 0 && selectedVehicleId > 0 && selectedLicensePlate.length > 0
             onClicked: {
-                apiClient.createBooking(userId, selectedVehicleId, selectedLotId, startTimeField.text, endTimeField.text)
+                var spaceType = spaceTypeComboBox.currentText
+                apiClient.vehicleEntry(selectedLicensePlate, spaceType)
             }
         }
 
@@ -164,12 +126,8 @@ Page {
             Layout.fillWidth: true
             text: "取消"
             onClicked: {
-                console.log("Cancel button clicked, stackView:", stackView)
                 if (stackView) {
-                    console.log("Popping BookingPage")
                     stackView.pop()
-                } else {
-                    console.log("stackView is null, cannot pop BookingPage")
                 }
             }
         }
@@ -272,13 +230,6 @@ Page {
     }
 
     Connections {
-        target: authManager
-        function onLoginStatusChanged() {
-            loadUserVehicles()
-        }
-    }
-
-    Connections {
         target: apiClient
 
         function onParkingLotsReceived(lots) {
@@ -287,11 +238,8 @@ Page {
                 parkingLotModel.append(lots[i])
             }
 
-            // 默认选中第一个停车场，便于后续直接查看可视化
             if (parkingLotModel.count > 0) {
                 lotComboBox.currentIndex = 0
-            } else {
-                selectedLotId = 0
             }
         }
 
@@ -301,12 +249,20 @@ Page {
                 return
             }
 
-            if (response.hasOwnProperty("code") && response.code === 0) {
-                // Booking created successfully
+            var url = response.url || ""
+            if (url.indexOf("/api/parking/entry") >= 0) {
+                // 入场成功，返回上一页
                 if (stackView) {
                     stackView.pop()
                 }
             }
+        }
+    }
+
+    Connections {
+        target: authManager
+        function onLoginStatusChanged() {
+            loadUserVehicles()
         }
     }
 }

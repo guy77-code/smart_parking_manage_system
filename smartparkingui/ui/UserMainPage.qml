@@ -74,14 +74,14 @@ Page {
                                     text: "停车"
                                     visible: parkingStatusText.text === "当前暂无车辆在使用停车场"
                                     onClicked: {
-                                        // 导航到预订/停车页面（简化为预订入口）
+                                        // 导航到车辆入场页面
                                         if (stackView) {
-                                            stackView.push(Qt.resolvedUrl("BookingPage.qml"), {
+                                            stackView.push(Qt.resolvedUrl("ParkingEntryPage.qml"), {
                                                                userId: userId,
                                                                stackView: stackView
                                                            })
                                         } else {
-                                            console.log("stackView is null, cannot navigate to BookingPage")
+                                            console.log("stackView is null, cannot navigate to ParkingEntryPage")
                                         }
                                     }
                                 }
@@ -226,9 +226,19 @@ Page {
             ColumnLayout {
                 anchors.fill: parent
                 anchors.margins: 10
-                Text { text: "预订编号: " + (model.reservationCode || "") }
-                Text { text: "状态: " + getStatusText(model.status) }
-                Text { text: "时间: " + (model.startTime || "") + " - " + (model.endTime || "") }
+                Text { 
+                    text: "预订编号: " + (model.reservationCode || model.reservation_code || model.reservation_cod || "")
+                    font.pixelSize: 14
+                }
+                Text { 
+                    text: "状态: " + getStatusText(model.status)
+                    font.pixelSize: 14
+                }
+                Text { 
+                    text: "时间: " + (model.startTime || model.start_time || "") + " - " + (model.endTime || model.end_time || "")
+                    font.pixelSize: 12
+                    color: "gray"
+                }
             }
         }
     }
@@ -274,7 +284,7 @@ Page {
         id: violationDelegate
         Rectangle {
             width: ListView.view.width
-            height: 100
+            height: 120
             border.color: "gray"
             border.width: 1
             radius: 5
@@ -282,14 +292,44 @@ Page {
             ColumnLayout {
                 anchors.fill: parent
                 anchors.margins: 10
-                Text { text: "违规类型: " + (model.violationType || "") }
-                Text { text: "罚款金额: ¥" + (model.fineAmount || 0) }
-                Text { text: "状态: " + (model.status === 1 ? "已处理" : "未处理") }
-                Button {
-                    text: "支付罚款"
-                    visible: model.status === 0
-                    onClicked: {
-                        apiClient.payViolationFine(model.violationId)
+                spacing: 5
+                
+                Text { 
+                    text: "违规类型: " + (model.violationType || model.violation_type || "")
+                    font.pixelSize: 14
+                    font.bold: true
+                }
+                Text { 
+                    text: "罚款金额: ¥" + ((model.fineAmount || model.fine_amount || 0).toFixed(2))
+                    font.pixelSize: 14
+                    color: "red"
+                }
+                Text { 
+                    text: "状态: " + (model.status === 1 ? "已处理" : "未处理")
+                    font.pixelSize: 14
+                    color: model.status === 1 ? "green" : "orange"
+                }
+                
+                RowLayout {
+                    Item { Layout.fillWidth: true }
+                    Button {
+                        text: "处理罚单"
+                        visible: model.status === 0
+                        onClicked: {
+                            var violationId = model.violationId || model.violation_id || 0
+                            var fineAmount = model.fineAmount || model.fine_amount || 0
+                            
+                            if (violationId > 0 && stackView) {
+                                stackView.push(Qt.resolvedUrl("PaymentPage.qml"), {
+                                    orderId: violationId,
+                                    orderType: "violation",
+                                    amount: fineAmount,
+                                    stackView: stackView
+                                })
+                            } else if (violationId > 0) {
+                                apiClient.payViolationFine(violationId)
+                            }
+                        }
                     }
                 }
             }
@@ -442,21 +482,34 @@ Page {
                         // Filter out null values and create clean record
                         if (record && typeof record === 'object') {
                             var cleanRecord = {}
-                            for (var key in record) {
-                                if (record[key] !== null && record[key] !== undefined) {
-                                    cleanRecord[key] = record[key]
-                                } else {
-                                    // Set default values for null fields
-                                    if (key === 'status') cleanRecord[key] = 0
-                                    else if (key === 'reservationCode') cleanRecord[key] = ""
-                                    else if (key === 'startTime') cleanRecord[key] = ""
-                                    else if (key === 'endTime') cleanRecord[key] = ""
-                                    else cleanRecord[key] = ""
-                                }
-                            }
+                            // 处理字段名兼容性
+                            cleanRecord.orderId = record.order_id !== undefined ? record.order_id : (record.orderId || 0)
+                            cleanRecord.order_id = cleanRecord.orderId
+                            cleanRecord.reservationCode = record.reservation_code !== undefined ? record.reservation_code : (record.reservationCode || record.reservation_cod || "")
+                            cleanRecord.reservation_code = cleanRecord.reservationCode
+                            cleanRecord.startTime = record.start_time !== undefined ? record.start_time : (record.startTime || "")
+                            cleanRecord.start_time = cleanRecord.startTime
+                            cleanRecord.endTime = record.end_time !== undefined ? record.end_time : (record.endTime || "")
+                            cleanRecord.end_time = cleanRecord.endTime
+                            cleanRecord.status = record.status !== undefined ? record.status : 0
+                            cleanRecord.totalFee = record.total_fee !== undefined ? record.total_fee : (record.totalFee || 0)
+                            cleanRecord.total_fee = cleanRecord.totalFee
+                            cleanRecord.paymentStatus = record.payment_status !== undefined ? record.payment_status : (record.paymentStatus || 0)
+                            cleanRecord.payment_status = cleanRecord.paymentStatus
+                            
                             bookingModel.append(cleanRecord)
                         }
                     }
+                }
+                return
+            }
+            
+            // Handle payment notification - refresh violations and payment records
+            if (url.indexOf("/payment/notify") >= 0) {
+                if (response.code === 0 || (response.code === undefined && !response.hasOwnProperty("error"))) {
+                    console.log("Payment successful, refreshing violations and payment records")
+                    loadViolations()
+                    loadPaymentRecords()
                 }
                 return
             }
@@ -494,26 +547,36 @@ Page {
 
         function onViolationsReceived(response) {
             violationModel.clear()
+            console.log("Violations response in UserMainPage:", JSON.stringify(response))
+            
             var data = response.data || []
             if (Array.isArray(data)) {
                 for (var i = 0; i < data.length; i++) {
                     var record = data[i]
-                    // Filter out null values and create clean record
                     if (record && typeof record === 'object') {
-                        var cleanRecord = {}
-                        for (var key in record) {
-                            if (record[key] !== null && record[key] !== undefined) {
-                                cleanRecord[key] = record[key]
-                            } else {
-                                // Set default values for null fields
-                                if (key === 'violationId') cleanRecord[key] = 0
-                                else if (key === 'fineAmount') cleanRecord[key] = 0
-                                else if (key === 'status') cleanRecord[key] = 0
-                                else if (key === 'violationType') cleanRecord[key] = ""
-                                else cleanRecord[key] = ""
-                            }
-                        }
-                        violationModel.append(cleanRecord)
+                        // 处理字段名兼容性，确保正确提取违规类型和罚款金额
+                        var violationType = record.violation_type !== undefined ? record.violation_type : 
+                                          (record.violationType !== undefined ? record.violationType : "")
+                        var fineAmount = record.fine_amount !== undefined ? parseFloat(record.fine_amount) : 
+                                        (record.fineAmount !== undefined ? parseFloat(record.fineAmount) : 0)
+                        var violationId = record.violation_id !== undefined ? record.violation_id : 
+                                         (record.violationId !== undefined ? record.violationId : 0)
+                        var violationTime = record.violation_time !== undefined ? record.violation_time : 
+                                           (record.violationTime !== undefined ? record.violationTime : "")
+                        var status = record.status !== undefined ? record.status : 0
+                        
+                        violationModel.append({
+                            violationId: violationId,
+                            violation_id: violationId,
+                            violationType: violationType,
+                            violation_type: violationType,
+                            violationTime: violationTime,
+                            violation_time: violationTime,
+                            fineAmount: fineAmount,
+                            fine_amount: fineAmount,
+                            status: status,
+                            description: record.description || ""
+                        })
                     }
                 }
             }

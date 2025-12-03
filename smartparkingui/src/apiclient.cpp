@@ -123,6 +123,10 @@ void ApiClient::onRequestFinished(QNetworkReply *reply)
             if (userData.isEmpty()) {
                 userData = response.value("admin_info").toObject();
             }
+            // 确保车辆信息被正确传递
+            if (userData.contains("vehicles") && userData["vehicles"].isArray()) {
+                // 车辆信息已经在userData中，直接传递
+            }
             emit loginSuccess(userData, token);
         } else if (url.contains("/api/v1/register")) {
             emit registerSuccess(response);
@@ -275,6 +279,47 @@ void ApiClient::addParkingLot(const QString &name,
     data["status"] = status;
     data["description"] = description;
     makeRequest("POST", "/api/v2/addparkinglot", data);
+}
+
+void ApiClient::deleteParkingLot(int lotId)
+{
+    makeRequest("DELETE", QString("/api/v2/deleteparkinglot/%1").arg(lotId));
+}
+
+// Parking space management
+void ApiClient::addParkingSpace(int lotId, int level, const QString &spaceNumber, const QString &spaceType, int status)
+{
+    QJsonObject data;
+    data["lot_id"] = lotId;
+    data["level"] = level;
+    data["space_number"] = spaceNumber;
+    data["space_type"] = spaceType;
+    data["status"] = status;
+    makeRequest("POST", "/api/v2/addparkingspace", data);
+}
+
+void ApiClient::updateParkingSpaceStatus(int spaceId, int status, int isOccupied, int isReserved)
+{
+    QJsonObject data;
+    if (status >= 0) {
+        data["status"] = status;
+    }
+    if (isOccupied >= 0) {
+        data["is_occupied"] = isOccupied;
+    }
+    if (isReserved >= 0) {
+        data["is_reserved"] = isReserved;
+    }
+    makeRequest("PATCH", QString("/api/v2/updatespacestatus/%1").arg(spaceId), data);
+}
+
+void ApiClient::deleteParkingSpace(int spaceId)
+{
+    // 注意：后端可能没有删除接口，这里先使用更新状态为禁用
+    // 如果后端有删除接口，可以改为 DELETE 请求
+    QJsonObject data;
+    data["status"] = 0; // 设置为禁用状态
+    makeRequest("PATCH", QString("/api/v2/updatespacestatus/%1").arg(spaceId), data);
 }
 
 // Booking APIs

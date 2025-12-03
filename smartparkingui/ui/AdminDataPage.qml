@@ -92,29 +92,112 @@ Page {
                                     function normalizeTime(t, isEnd) {
                                         if (!t || t.length === 0)
                                             return ""
+                                        // 如果已经包含T，直接返回
                                         if (t.indexOf("T") >= 0)
                                             return t
+                                        // 确保日期格式为 YYYY-MM-DD（补零并验证有效性）
+                                        var parts = t.split("-")
+                                        if (parts.length === 3) {
+                                            var year = parseInt(parts[0])
+                                            var month = parseInt(parts[1].length === 1 ? "0" + parts[1] : parts[1])
+                                            var day = parseInt(parts[2].length === 1 ? "0" + parts[2] : parts[2])
+                                            
+                                            // 验证日期有效性
+                                            var daysInMonth = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+                                            // 检查闰年
+                                            if (month === 2 && ((year % 4 === 0 && year % 100 !== 0) || year % 400 === 0)) {
+                                                daysInMonth[1] = 29
+                                            }
+                                            
+                                            if (month < 1 || month > 12) {
+                                                console.log("无效的月份:", month)
+                                                return ""
+                                            }
+                                            
+                                            if (day < 1 || day > daysInMonth[month - 1]) {
+                                                console.log("无效的日期:", day, "月份:", month)
+                                                // 如果是结束日期且日期无效，使用该月最后一天
+                                                if (isEnd) {
+                                                    day = daysInMonth[month - 1]
+                                                } else {
+                                                    return ""
+                                                }
+                                            }
+                                            
+                                            var monthStr = month < 10 ? "0" + month : "" + month
+                                            var dayStr = day < 10 ? "0" + day : "" + day
+                                            t = year + "-" + monthStr + "-" + dayStr
+                                        }
                                         return t + (isEnd ? "T23:59:59Z" : "T00:00:00Z")
                                     }
                                     var start = normalizeTime(startTimeField.text, false)
                                     var end = normalizeTime(endTimeField.text, true)
-                                    apiClient.getOccupancyAnalysis(start, end)
+                                    if (start && end) {
+                                        apiClient.getOccupancyAnalysis(start, end)
+                                    } else {
+                                        occupancyDataText = "请填写开始时间和结束时间"
+                                    }
                                 }
                             }
                         }
 
-                        Rectangle {
+                        ScrollView {
                             Layout.fillWidth: true
                             Layout.preferredHeight: 400
-                            border.color: "gray"
-                            border.width: 1
-                            radius: 5
-
-                            Text {
-                                anchors.centerIn: parent
-                                text: occupancyDataText
-                                color: "gray"
+                            
+                            Rectangle {
+                                width: parent.width
+                                height: Math.max(occupancyTable.height + 20, 400)
+                                border.color: "gray"
+                                border.width: 1
+                                radius: 5
+                                
+                                ColumnLayout {
+                                    anchors.fill: parent
+                                    anchors.margins: 10
+                                    spacing: 10
+                                    
+                                    Text {
+                                        text: occupancyDataText.indexOf("使用率分析结果") >= 0 ? occupancyDataText : "车位使用率分析结果"
+                                        color: occupancyDataText.indexOf("使用率分析结果") >= 0 ? "gray" : "black"
+                                        visible: occupancyTable.count === 0
+                                    }
+                                    
+                                    ListView {
+                                        id: occupancyTable
+                                        Layout.fillWidth: true
+                                        Layout.fillHeight: true
+                                        model: occupancyModel
+                                        delegate: Rectangle {
+                                            width: ListView.view.width
+                                            height: 60
+                                            border.color: "lightgray"
+                                            border.width: 1
+                                            radius: 3
+                                            
+                                            RowLayout {
+                                                anchors.fill: parent
+                                                anchors.margins: 10
+                                                spacing: 10
+                                                
+                                                Text {
+                                                    Layout.preferredWidth: 100
+                                                    text: model.label || ""
+                                                    font.bold: true
+                                                }
+                                                Text {
+                                                    Layout.fillWidth: true
+                                                    text: model.value || ""
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
                             }
+                        }
+                        
+                        ListModel {
+                            id: occupancyModel
                         }
                     }
                 }
@@ -164,18 +247,63 @@ Page {
                             }
                         }
 
-                        Rectangle {
+                        ScrollView {
                             Layout.fillWidth: true
                             Layout.preferredHeight: 400
-                            border.color: "gray"
-                            border.width: 1
-                            radius: 5
-
-                            Text {
-                                anchors.centerIn: parent
-                                text: violationDataText
-                                color: "gray"
+                            
+                            Rectangle {
+                                width: parent.width
+                                height: Math.max(violationTable.height + 20, 400)
+                                border.color: "gray"
+                                border.width: 1
+                                radius: 5
+                                
+                                ColumnLayout {
+                                    anchors.fill: parent
+                                    anchors.margins: 10
+                                    spacing: 10
+                                    
+                                    Text {
+                                        text: violationDataText.indexOf("违规分析结果") >= 0 ? violationDataText : "违规行为分析结果"
+                                        color: violationDataText.indexOf("违规分析结果") >= 0 ? "gray" : "black"
+                                        visible: violationTable.count === 0
+                                    }
+                                    
+                                    ListView {
+                                        id: violationTable
+                                        Layout.fillWidth: true
+                                        Layout.fillHeight: true
+                                        model: violationModel
+                                        delegate: Rectangle {
+                                            width: ListView.view.width
+                                            height: 60
+                                            border.color: "lightgray"
+                                            border.width: 1
+                                            radius: 3
+                                            
+                                            RowLayout {
+                                                anchors.fill: parent
+                                                anchors.margins: 10
+                                                spacing: 10
+                                                
+                                                Text {
+                                                    Layout.preferredWidth: 150
+                                                    text: model.label || ""
+                                                    font.bold: true
+                                                }
+                                                Text {
+                                                    Layout.fillWidth: true
+                                                    text: model.value || ""
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
                             }
+                        }
+                        
+                        ListModel {
+                            id: violationModel
                         }
                     }
                 }
@@ -235,18 +363,63 @@ Page {
                             }
                         }
 
-                        Rectangle {
+                        ScrollView {
                             Layout.fillWidth: true
                             Layout.preferredHeight: 400
-                            border.color: "gray"
-                            border.width: 1
-                            radius: 5
-
-                            Text {
-                                anchors.centerIn: parent
-                                text: reportDataText
-                                color: "gray"
+                            
+                            Rectangle {
+                                width: parent.width
+                                height: Math.max(reportTable.height + 20, 400)
+                                border.color: "gray"
+                                border.width: 1
+                                radius: 5
+                                
+                                ColumnLayout {
+                                    anchors.fill: parent
+                                    anchors.margins: 10
+                                    spacing: 10
+                                    
+                                    Text {
+                                        text: reportDataText.indexOf("报表内容") >= 0 ? reportDataText : "报表内容"
+                                        color: reportDataText.indexOf("报表内容") >= 0 ? "gray" : "black"
+                                        visible: reportTable.count === 0
+                                    }
+                                    
+                                    ListView {
+                                        id: reportTable
+                                        Layout.fillWidth: true
+                                        Layout.fillHeight: true
+                                        model: reportModel
+                                        delegate: Rectangle {
+                                            width: ListView.view.width
+                                            height: 60
+                                            border.color: "lightgray"
+                                            border.width: 1
+                                            radius: 3
+                                            
+                                            RowLayout {
+                                                anchors.fill: parent
+                                                anchors.margins: 10
+                                                spacing: 10
+                                                
+                                                Text {
+                                                    Layout.preferredWidth: 150
+                                                    text: model.label || ""
+                                                    font.bold: true
+                                                }
+                                                Text {
+                                                    Layout.fillWidth: true
+                                                    text: model.value || ""
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
                             }
+                        }
+                        
+                        ListModel {
+                            id: reportModel
                         }
                     }
                 }
@@ -260,18 +433,156 @@ Page {
         function onRequestFinished(response) {
             if (response.hasOwnProperty("error")) {
                 console.log("Error:", response.error)
+                var url = response.url || ""
+                if (url.indexOf("/admin/occupancy") >= 0) {
+                    occupancyDataText = "查询失败: " + (response.error || "未知错误")
+                } else if (url.indexOf("/admin/violations") >= 0) {
+                    violationDataText = "查询失败: " + (response.error || "未知错误")
+                } else if (url.indexOf("/admin/report") >= 0) {
+                    reportDataText = "生成报表失败: " + (response.error || "未知错误")
+                }
                 return
             }
 
-            if (response.hasOwnProperty("data")) {
-                var data = response.data
-                // 根据当前 Tab 更新对应显示内容
-                if (tabBar.currentIndex === 0) {
-                    occupancyDataText = JSON.stringify(data, null, 2)
-                } else if (tabBar.currentIndex === 1) {
-                    violationDataText = JSON.stringify(data, null, 2)
-                } else if (tabBar.currentIndex === 2) {
-                    reportDataText = JSON.stringify(response.report || data, null, 2)
+            var url = response.url || ""
+            
+            if (url.indexOf("/admin/occupancy") >= 0) {
+                // 车位使用率分析
+                occupancyModel.clear()
+                var data = response.data || {}
+                
+                if (data.total_spaces !== undefined) {
+                    occupancyModel.append({label: "总车位数", value: data.total_spaces})
+                }
+                if (data.occupied_spaces !== undefined) {
+                    occupancyModel.append({label: "已占用车位数", value: data.occupied_spaces})
+                }
+                if (data.reserved_spaces !== undefined) {
+                    occupancyModel.append({label: "已预订车位数", value: data.reserved_spaces})
+                }
+                if (data.occupancy_rate !== undefined) {
+                    occupancyModel.append({label: "使用率", value: (data.occupancy_rate.toFixed(2) + "%")})
+                }
+                if (data.total_income !== undefined) {
+                    occupancyModel.append({label: "总收入", value: "¥" + data.total_income.toFixed(2)})
+                }
+                if (data.avg_daily_income !== undefined) {
+                    occupancyModel.append({label: "平均日收入", value: "¥" + data.avg_daily_income.toFixed(2)})
+                }
+                if (data.avg_parking_hours !== undefined) {
+                    occupancyModel.append({label: "平均停车时长", value: data.avg_parking_hours.toFixed(2) + "小时"})
+                }
+                
+                if (occupancyModel.count === 0) {
+                    occupancyDataText = "使用率分析结果将显示在这里"
+                } else {
+                    occupancyDataText = ""
+                }
+            } else if (url.indexOf("/admin/violations") >= 0) {
+                // 违规行为分析
+                violationModel.clear()
+                var vData = response.data || {}
+                
+                if (vData.total_violations !== undefined) {
+                    violationModel.append({label: "总违规次数", value: vData.total_violations})
+                }
+                if (vData.total_fines !== undefined) {
+                    violationModel.append({label: "罚款总额", value: "¥" + vData.total_fines.toFixed(2)})
+                }
+                if (vData.collected_fines !== undefined) {
+                    violationModel.append({label: "已收罚款", value: "¥" + vData.collected_fines.toFixed(2)})
+                }
+                
+                // 违规类型统计
+                if (vData.violations_by_type && Array.isArray(vData.violations_by_type)) {
+                    violationModel.append({label: "---", value: "---"})
+                    violationModel.append({label: "违规类型统计", value: ""})
+                    for (var i = 0; i < vData.violations_by_type.length; i++) {
+                        var vt = vData.violations_by_type[i]
+                        violationModel.append({
+                            label: "  " + (vt.violation_type || ""),
+                            value: vt.count || 0
+                        })
+                    }
+                }
+                
+                // 违规状态统计
+                if (vData.violations_by_status && Array.isArray(vData.violations_by_status)) {
+                    violationModel.append({label: "---", value: "---"})
+                    violationModel.append({label: "违规状态统计", value: ""})
+                    for (var j = 0; j < vData.violations_by_status.length; j++) {
+                        var vs = vData.violations_by_status[j]
+                        var statusText = vs.status === 0 ? "未处理" : "已处理"
+                        violationModel.append({
+                            label: "  " + statusText,
+                            value: vs.count || 0
+                        })
+                    }
+                }
+                
+                if (violationModel.count === 0) {
+                    violationDataText = "违规分析结果将显示在这里"
+                } else {
+                    violationDataText = ""
+                }
+            } else if (url.indexOf("/admin/report") >= 0) {
+                // 报表生成
+                reportModel.clear()
+                var reportData = response.report || response.data || {}
+                
+                if (reportData.report_type) {
+                    reportModel.append({label: "报表类型", value: reportData.report_type === "monthly" ? "月度报表" : "年度报表"})
+                }
+                if (reportData.period) {
+                    reportModel.append({label: "统计周期", value: reportData.period})
+                }
+                if (reportData.generated_at) {
+                    reportModel.append({label: "生成时间", value: reportData.generated_at})
+                }
+                
+                // 停车统计
+                if (reportData.parking_statistics) {
+                    reportModel.append({label: "---", value: "---"})
+                    reportModel.append({label: "停车统计", value: ""})
+                    var ps = reportData.parking_statistics
+                    if (ps.total_parking_records !== undefined) {
+                        reportModel.append({label: "  总停车记录", value: ps.total_parking_records})
+                    }
+                    if (ps.total_revenue !== undefined) {
+                        reportModel.append({label: "  总收入", value: "¥" + ps.total_revenue.toFixed(2)})
+                    }
+                }
+                
+                // 违规统计
+                if (reportData.violation_statistics) {
+                    reportModel.append({label: "---", value: "---"})
+                    reportModel.append({label: "违规统计", value: ""})
+                    var vs = reportData.violation_statistics
+                    if (vs.total_violations !== undefined) {
+                        reportModel.append({label: "  总违规次数", value: vs.total_violations})
+                    }
+                    if (vs.total_fines !== undefined) {
+                        reportModel.append({label: "  罚款总额", value: "¥" + vs.total_fines.toFixed(2)})
+                    }
+                }
+                
+                // 收入统计
+                if (reportData.revenue_statistics) {
+                    reportModel.append({label: "---", value: "---"})
+                    reportModel.append({label: "收入统计", value: ""})
+                    var rs = reportData.revenue_statistics
+                    if (rs.total_revenue !== undefined) {
+                        reportModel.append({label: "  总收入", value: "¥" + rs.total_revenue.toFixed(2)})
+                    }
+                    if (rs.avg_daily_revenue !== undefined) {
+                        reportModel.append({label: "  平均日收入", value: "¥" + rs.avg_daily_revenue.toFixed(2)})
+                    }
+                }
+                
+                if (reportModel.count === 0) {
+                    reportDataText = "报表内容将显示在这里"
+                } else {
+                    reportDataText = ""
                 }
             }
         }

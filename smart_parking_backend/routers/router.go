@@ -52,6 +52,7 @@ func InitRouter(bookingSvc *booking.Service, paymentCfg *payment.Service) *gin.E
 		api_1.POST("/addparkinglot", controller.AddParkingLot)
 		api_1.GET("/getparkinglots", controller.GetAllParkingLots)
 		api_1.GET("/getparkinglot/:id", controller.GetParkingLotByID)
+		api_1.DELETE("/deleteparkinglot/:id", controller.DeleteParkingLot)
 		api_1.POST("/addparkingspace", controller.AddParkingSpace)
 		api_1.PATCH("/updatespacestatus/:id", controller.UpdateSpaceStatus)
 		api_1.GET("/getspacesbylotid/:lot_id", controller.GetSpacesByLotID)

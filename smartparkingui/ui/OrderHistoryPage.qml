@@ -86,11 +86,30 @@ Page {
                         text: "支付"
                         visible: model.paymentStatus === 0
                         onClicked: {
-                            stackView.push(paymentPage, {
-                                orderId: model.orderId,
-                                type: "parking",
-                                amount: model.amount
-                            })
+                            if (stackView) {
+                                // 从订单信息中判断类型
+                                // 如果订单信息中有order字段，可以从中判断类型
+                                var orderType = "reservation"  // 默认类型
+                                
+                                // 尝试从订单信息中获取类型提示
+                                // 注意：PaymentRecord的order_id可能对应reservation、parking或violation
+                                // 这里简化处理，优先尝试reservation，如果失败可以重试其他类型
+                                
+                                var orderId = model.orderId || model.order_id || 0
+                                var amount = model.amount || 0
+                                
+                                console.log("Payment button clicked - OrderID:", orderId, "Amount:", amount)
+                                
+                                // 跳转到支付页面，让用户选择支付方式
+                                stackView.push(Qt.resolvedUrl("PaymentPage.qml"), {
+                                    orderId: orderId,
+                                    orderType: orderType,  // 默认reservation，支付页面会尝试创建支付
+                                    amount: amount,
+                                    stackView: stackView
+                                })
+                            } else {
+                                console.log("stackView is null, cannot navigate to PaymentPage")
+                            }
                         }
                     }
                 }
@@ -113,7 +132,33 @@ Page {
             paymentModel.clear()
             var records = response.records || []
             for (var i = 0; i < records.length; i++) {
-                paymentModel.append(records[i])
+                var record = records[i]
+                if (record && typeof record === 'object') {
+                    // 处理字段名兼容性
+                    paymentModel.append({
+                        paymentId: record.payment_id !== undefined ? record.payment_id : (record.paymentId || 0),
+                        payment_id: record.payment_id !== undefined ? record.payment_id : (record.paymentId || 0),
+                        orderId: record.order_id !== undefined ? record.order_id : (record.orderId || 0),
+                        order_id: record.order_id !== undefined ? record.order_id : (record.orderId || 0),
+                        amount: record.amount || 0,
+                        method: record.method || "",
+                        paymentStatus: record.payment_status !== undefined ? record.payment_status : (record.paymentStatus || 0),
+                        payment_status: record.payment_status !== undefined ? record.payment_status : (record.paymentStatus || 0),
+                        payTime: record.pay_time !== undefined ? record.pay_time : (record.payTime || ""),
+                        pay_time: record.pay_time !== undefined ? record.pay_time : (record.payTime || "")
+                    })
+                }
+            }
+        }
+
+        function onRequestFinished(response) {
+            var url = response.url || ""
+            // 支付成功后刷新订单列表
+            if (url.indexOf("/payment/notify") >= 0) {
+                if (response.code === 0 || (response.code === undefined && !response.hasOwnProperty("error"))) {
+                    console.log("Payment successful, refreshing payment records")
+                    apiClient.getUserPaymentRecords(1, 50)
+                }
             }
         }
     }

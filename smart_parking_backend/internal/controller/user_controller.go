@@ -217,8 +217,24 @@ func Login(db *gorm.DB, rdb *redis.Client) gin.HandlerFunc {
 		now := time.Now()
 		db.Model(&user).Update("last_login", &now)
 
+		// ✅ 预加载车辆信息
+		var vehicles []model.Vehicle
+		db.Where("user_id = ?", user.UserID).Find(&vehicles)
+
 		// ✅ 生成 JWT token
 		token, _ := utils.GenerateToken(user.UserID, user.Username)
+
+		// 构建车辆列表（转换为前端需要的格式）
+		var vehicleList []gin.H
+		for _, v := range vehicles {
+			vehicleList = append(vehicleList, gin.H{
+				"vehicle_id":    v.VehicleID,
+				"license_plate": v.LicensePlate,
+				"brand":         v.Brand,
+				"model":         v.Model,
+				"color":         v.Color,
+			})
+		}
 
 		c.JSON(http.StatusOK, gin.H{
 			"message": "Login success",
@@ -227,6 +243,7 @@ func Login(db *gorm.DB, rdb *redis.Client) gin.HandlerFunc {
 				"username": user.Username,
 				"phone":    user.Phone,
 				"email":    user.Email,
+				"vehicles": vehicleList,
 			},
 			"token": token,
 		})

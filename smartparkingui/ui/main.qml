@@ -119,6 +119,7 @@ ApplicationWindow {
             id: violationPage
             ViolationPage {
                 userId: window.currentUserId
+                stackView: stackView
             }
         }
 
