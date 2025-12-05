@@ -20,7 +20,7 @@ AuthManager::AuthManager(QObject *parent)
         if (!userInfoStr.isEmpty()) {
             QJsonDocument doc = QJsonDocument::fromJson(userInfoStr.toUtf8());
             if (doc.isObject()) {
-                m_userInfo = doc.object();
+                m_userInfo = doc.object().toVariantMap();
             }
         }
         emit loginStatusChanged();
@@ -37,12 +37,12 @@ QString AuthManager::userType() const
     return m_userType;
 }
 
-QJsonObject AuthManager::userInfo() const
+QVariantMap AuthManager::userInfo() const
 {
     return m_userInfo;
 }
 
-void AuthManager::saveToken(const QString &token, const QString &type, const QJsonObject &userInfo)
+void AuthManager::saveToken(const QString &token, const QString &type, const QVariantMap &userInfo)
 {
     m_token = token;
     m_userType = type;
@@ -52,7 +52,8 @@ void AuthManager::saveToken(const QString &token, const QString &type, const QJs
     QSettings settings;
     settings.setValue("auth/token", token);
     settings.setValue("auth/userType", type);
-    settings.setValue("auth/userInfo", QJsonDocument(userInfo).toJson());
+    QJsonDocument doc = QJsonDocument::fromVariant(userInfo);
+    settings.setValue("auth/userInfo", QString::fromUtf8(doc.toJson(QJsonDocument::Compact)));
     
     emit loginStatusChanged();
 }
@@ -61,7 +62,7 @@ void AuthManager::clearAuth()
 {
     m_token.clear();
     m_userType.clear();
-    m_userInfo = QJsonObject();
+    m_userInfo.clear();
     m_loggedIn = false;
 
     QSettings settings;

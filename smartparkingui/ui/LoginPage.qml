@@ -204,6 +204,16 @@ Page {
                 var rawError = response.error || ""
                 var backendMsg = response.message || ""
 
+                // 过滤掉非登录相关的错误信息，避免显示无关错误
+                if (rawError && (rawError.indexOf("未找到在场停车记录") >= 0 || 
+                                 rawError.indexOf("停车记录") >= 0 ||
+                                 rawError.indexOf("订单") >= 0 ||
+                                 rawError.indexOf("支付") >= 0)) {
+                    // 这些错误不应该出现在登录页，忽略它们
+                    console.log("Ignoring non-login error in LoginPage:", rawError)
+                    return
+                }
+
                 if (httpStatus === 401 || httpStatus === 403) {
                     if (isRegisterMode) {
                         statusText.text = "注册失败：请检查输入信息是否正确"
@@ -213,7 +223,7 @@ Page {
                         statusText.text = "登录失败：手机号或密码错误"
                     }
                 } else if (rawError && rawError.indexOf("需要验证") >= 0) {
-                    // Qt 网络层的“主机需要验证”等信息，改成用户可理解的提示
+                    // Qt 网络层的"主机需要验证"等信息，改成用户可理解的提示
                     if (url.indexOf("/admin/login") >= 0) {
                         statusText.text = "管理员登录失败：账号或密码错误"
                     } else {
@@ -222,7 +232,20 @@ Page {
                 } else if (httpStatus === 0) {
                     statusText.text = "无法连接服务器，请确认后端服务已启动（http://127.0.0.1:8080）"
                 } else {
-                    statusText.text = backendMsg || rawError || "操作失败（HTTP " + httpStatus + "）"
+                    // 只显示与登录/注册相关的错误信息
+                    if (backendMsg && (backendMsg.indexOf("登录") >= 0 || 
+                                       backendMsg.indexOf("注册") >= 0 ||
+                                       backendMsg.indexOf("密码") >= 0 ||
+                                       backendMsg.indexOf("手机号") >= 0)) {
+                        statusText.text = backendMsg
+                    } else if (rawError && (rawError.indexOf("登录") >= 0 || 
+                                            rawError.indexOf("注册") >= 0 ||
+                                            rawError.indexOf("密码") >= 0 ||
+                                            rawError.indexOf("手机号") >= 0)) {
+                        statusText.text = rawError
+                    } else {
+                        statusText.text = "操作失败（HTTP " + httpStatus + "）"
+                    }
                 }
             }
         }

@@ -143,86 +143,98 @@ Page {
 
     Component.onCompleted: {
         apiClient.getParkingLots()
+        // 优先使用后端接口获取车辆列表，authManager.userInfo 作为兜底
+        apiClient.getUserVehicles()
         loadUserVehicles()
+    }
+
+    onVisibleChanged: {
+        if (visible) {
+            loadUserVehicles()
+        }
+    }
+
+    function cloneObject(obj) {
+        if (!obj)
+            return null
+        try {
+            return JSON.parse(JSON.stringify(obj))
+        } catch (err) {
+            console.log("cloneObject failed:", err)
+            return obj
+        }
+    }
+
+    function sanitizeVehicle(veh) {
+        if (!veh || typeof veh !== "object")
+            return null
+        var vehicleId = veh.vehicle_id !== undefined ? veh.vehicle_id :
+                        (veh.vehicleId !== undefined ? veh.vehicleId :
+                        (veh.VehicleID !== undefined ? veh.VehicleID : 0))
+        var licensePlate = veh.license_plate !== undefined ? veh.license_plate :
+                           (veh.licensePlate !== undefined ? veh.licensePlate :
+                           (veh.LicensePlate !== undefined ? veh.LicensePlate : ""))
+        if (vehicleId <= 0 || licensePlate.length === 0)
+            return null
+        return {
+            vehicleId: vehicleId,
+            vehicle_id: vehicleId,
+            licensePlate: licensePlate,
+            license_plate: licensePlate
+        }
+    }
+
+    function sanitizeLot(lot) {
+        if (!lot || typeof lot !== "object")
+            return null
+        var lotId = lot.lot_id !== undefined ? lot.lot_id :
+                    (lot.lotId !== undefined ? lot.lotId :
+                    (lot.LotID !== undefined ? lot.LotID : 0))
+        return {
+            lotId: lotId,
+            lot_id: lotId,
+            name: lot.name || lot.Name || "",
+            address: lot.address || lot.Address || "",
+            hourlyRate: lot.hourly_rate !== undefined ? lot.hourly_rate :
+                        (lot.hourlyRate !== undefined ? lot.hourlyRate : 0),
+            totalLevels: lot.total_levels !== undefined ? lot.total_levels :
+                         (lot.totalLevels !== undefined ? lot.totalLevels : 1),
+            totalSpaces: lot.total_spaces !== undefined ? lot.total_spaces :
+                         (lot.totalSpaces !== undefined ? lot.totalSpaces : 0)
+        }
     }
 
     function loadUserVehicles() {
         vehicleModel.clear()
-        var info = authManager.userInfo
-        console.log("Loading vehicles from userInfo:", JSON.stringify(info))
-        
+        var info = cloneObject(authManager.userInfo)
+        if (info)
+            console.log("Loading vehicles from userInfo:", JSON.stringify(info))
+
+        var vehicles = null
         if (info) {
-            var vehicles = null
-            
-            // 尝试多种可能的字段名和格式
             if (info.vehicles !== undefined) {
                 vehicles = info.vehicles
             } else if (info.Vehicles !== undefined) {
                 vehicles = info.Vehicles
             }
-            
-            // 处理数组格式
-            if (vehicles && Array.isArray(vehicles)) {
-                console.log("Found vehicles array with", vehicles.length, "items")
-                for (var i = 0; i < vehicles.length; i++) {
-                    var veh = vehicles[i]
-                    if (veh) {
-                        // 尝试多种字段名格式
-                        var vehicleId = veh.vehicle_id !== undefined ? veh.vehicle_id : 
-                                      (veh.vehicleId !== undefined ? veh.vehicleId : 
-                                      (veh.VehicleID !== undefined ? veh.VehicleID : 0))
-                        var licensePlate = veh.license_plate !== undefined ? veh.license_plate : 
-                                          (veh.licensePlate !== undefined ? veh.licensePlate : 
-                                          (veh.LicensePlate !== undefined ? veh.LicensePlate : ""))
-                        
-                        console.log("Processing vehicle:", vehicleId, licensePlate)
-                        
-                        if (vehicleId > 0 && licensePlate && licensePlate.length > 0) {
-                            vehicleModel.append({
-                                vehicleId: vehicleId,
-                                vehicle_id: vehicleId,
-                                licensePlate: licensePlate,
-                                license_plate: licensePlate
-                            })
-                        }
-                    }
-                }
-            } else if (vehicles && typeof vehicles === 'object') {
-                // 如果是对象，尝试转换为数组
-                console.log("Vehicles is object, converting to array")
-                var vehicleArray = []
-                for (var key in vehicles) {
-                    if (vehicles.hasOwnProperty(key)) {
-                        vehicleArray.push(vehicles[key])
-                    }
-                }
-                if (vehicleArray.length > 0) {
-                    vehicles = vehicleArray
-                    // 重新处理
-                    for (var j = 0; j < vehicles.length; j++) {
-                        var veh2 = vehicles[j]
-                        if (veh2) {
-                            var vehicleId2 = veh2.vehicle_id !== undefined ? veh2.vehicle_id : 
-                                           (veh2.vehicleId !== undefined ? veh2.vehicleId : 
-                                           (veh2.VehicleID !== undefined ? veh2.VehicleID : 0))
-                            var licensePlate2 = veh2.license_plate !== undefined ? veh2.license_plate : 
-                                              (veh2.licensePlate !== undefined ? veh2.licensePlate : 
-                                              (veh2.LicensePlate !== undefined ? veh2.LicensePlate : ""))
-                            
-                            if (vehicleId2 > 0 && licensePlate2 && licensePlate2.length > 0) {
-                                vehicleModel.append({
-                                    vehicleId: vehicleId2,
-                                    vehicle_id: vehicleId2,
-                                    licensePlate: licensePlate2,
-                                    license_plate: licensePlate2
-                                })
-                            }
-                        }
-                    }
+        }
+
+        if (vehicles && Array.isArray(vehicles)) {
+            for (var i = 0; i < vehicles.length; i++) {
+                var clean = sanitizeVehicle(vehicles[i])
+                if (clean)
+                    vehicleModel.append(clean)
+            }
+        } else if (vehicles && typeof vehicles === "object") {
+            for (var key in vehicles) {
+                if (vehicles.hasOwnProperty(key)) {
+                    var cleanObj = sanitizeVehicle(vehicles[key])
+                    if (cleanObj)
+                        vehicleModel.append(cleanObj)
                 }
             }
         }
-        
+
         console.log("Loaded vehicles count:", vehicleModel.count)
         if (vehicleModel.count === 0) {
             console.log("Warning: No vehicles found in userInfo:", JSON.stringify(info))
@@ -235,11 +247,16 @@ Page {
         function onParkingLotsReceived(lots) {
             parkingLotModel.clear()
             for (var i = 0; i < lots.length; i++) {
-                parkingLotModel.append(lots[i])
+                var clean = sanitizeLot(lots[i])
+                if (clean) {
+                    parkingLotModel.append(clean)
+                }
             }
 
             if (parkingLotModel.count > 0) {
                 lotComboBox.currentIndex = 0
+            } else {
+                selectedLotId = 0
             }
         }
 
@@ -256,6 +273,22 @@ Page {
                     stackView.pop()
                 }
             }
+        }
+
+        // 来自 /api/v1/vehicles 的车辆列表
+        function onUserVehiclesReceived(vehicles) {
+            if (!vehicles || !Array.isArray(vehicles)) {
+                return
+            }
+            vehicleModel.clear()
+            console.log("Received vehicles from /api/v1/vehicles (ParkingEntryPage):", JSON.stringify(vehicles))
+            for (var i = 0; i < vehicles.length; i++) {
+                var clean = sanitizeVehicle(vehicles[i])
+                if (clean) {
+                    vehicleModel.append(clean)
+                }
+            }
+            console.log("VehicleModel count after API (ParkingEntryPage):", vehicleModel.count)
         }
     }
 

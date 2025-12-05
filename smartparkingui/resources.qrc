@@ -5,6 +5,7 @@
         <file>ui/UserMainPage.qml</file>
         <file>ui/AdminMainPage.qml</file>
         <file>ui/BookingPage.qml</file>
+        <file>ui/ParkingEntryPage.qml</file>
         <file>ui/ParkingVisualizationPage.qml</file>
         <file>ui/PaymentPage.qml</file>
         <file>ui/ViolationPage.qml</file>

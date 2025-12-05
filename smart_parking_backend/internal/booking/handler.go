@@ -66,6 +66,7 @@ func (h *Handler) CreateBooking(c *gin.Context) {
 		LotID     uint   `json:"lot_id" binding:"required"`
 		Start     string `json:"start_time" binding:"required"`
 		End       string `json:"end_time" binding:"required"`
+		SpaceType string `json:"space_type"` // 可选，车位类型：普通、充电桩等
 	}
 
 	// 参数绑定验证
@@ -87,8 +88,14 @@ func (h *Handler) CreateBooking(c *gin.Context) {
 		return
 	}
 
+	// 如果未指定车位类型，默认为"普通"
+	spaceType := req.SpaceType
+	if spaceType == "" {
+		spaceType = "普通"
+	}
+
 	// 调用业务层
-	booking, err := h.service.CreateBooking(req.UserID, req.VehicleID, req.LotID, start, end)
+	booking, err := h.service.CreateBooking(req.UserID, req.VehicleID, req.LotID, start, end, spaceType)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, errorResponse(400, err.Error()))
 		return
@@ -153,4 +160,18 @@ func (h *Handler) GetBookingDetail(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, successResponse(booking))
+}
+
+// CheckAndUpdateExpiredBookings 检查并更新超时的预订记录
+func (h *Handler) CheckAndUpdateExpiredBookings(c *gin.Context) {
+	count, err := h.service.CheckAndUpdateExpiredBookings()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, errorResponse(500, "检查超时预订失败: "+err.Error()))
+		return
+	}
+
+	c.JSON(http.StatusOK, successResponse(gin.H{
+		"updated_count": count,
+		"message":       fmt.Sprintf("已更新 %d 条超时预订记录", count),
+	}))
 }

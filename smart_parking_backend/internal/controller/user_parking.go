@@ -163,17 +163,17 @@ func VehicleEntry(c *gin.Context) {
 		return
 	}
 
-	// 2. 检查是否有有效的预约
-	reservation, space, lot, err := findValidReservation(vehicle.VehicleID)
+	// 2. 检查是否有有效的预约（使用事务查询）
+	reservation, space, lot, err := findValidReservationWithTx(tx, vehicle.VehicleID)
 	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		tx.Rollback()
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "查询预约信息失败"})
 		return
 	}
 
-	// 3. 如果没有有效预约，分配新车位
+	// 3. 如果没有有效预约，分配新车位（使用事务查询）
 	if reservation == nil {
-		space, lot, err = assignNewSpace(req.SpaceType)
+		space, lot, err = assignNewSpaceWithTx(tx, req.SpaceType)
 		if err != nil {
 			tx.Rollback()
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "分配车位失败: " + err.Error()})
@@ -240,18 +240,26 @@ func findVehicleAndUser(licensePlate string) (*model.Vehicle, *model.Users_list,
 	return &vehicle, &vehicle.User, nil
 }
 
-// findValidReservation 查找有效的预约
+// findValidReservation 查找有效的预约（使用非事务DB，用于兼容旧代码）
 func findValidReservation(vehicleID uint) (*model.ReservationOrder, *model.ParkingSpace, *model.ParkingLot, error) {
+	return findValidReservationWithTx(inits.DB, vehicleID)
+}
+
+// findValidReservationWithTx 查找有效的预约（支持事务）
+func findValidReservationWithTx(db *gorm.DB, vehicleID uint) (*model.ReservationOrder, *model.ParkingSpace, *model.ParkingLot, error) {
 	now := time.Now()
 	var reservation model.ReservationOrder
 
 	// 查找当前时间在预约时间段内且状态为已预订的预约
-	err := inits.DB.
+	// 允许在预订开始时间前30分钟内入场（给予缓冲时间）
+	bufferTime := now.Add(30 * time.Minute)
+	err := db.
 		Where("vehicle_id = ?", vehicleID).
-		Where("start_time <= ? AND end_time >= ?", now, now).
+		Where("start_time <= ? AND end_time >= ?", bufferTime, now).
 		Where("status = ?", 1). // 1-已预订
 		Preload("Space").
 		Preload("Lot").
+		Order("start_time ASC"). // 如果有多个，选择最早开始的
 		First(&reservation).Error
 
 	if err != nil {
@@ -261,19 +269,22 @@ func findValidReservation(vehicleID uint) (*model.ReservationOrder, *model.Parki
 		return nil, nil, nil, err
 	}
 
-	// 检查预约的车位是否可用
-	if reservation.Space.IsOccupied == 1 {
-		return nil, nil, nil, errors.New("预约车位已被占用")
-	}
+	// 检查预约的车位是否可用（如果已被占用，仍然可以使用预订车位）
+	// 注意：这里不检查IsOccupied，因为预订车位应该优先使用
 
 	return &reservation, &reservation.Space, &reservation.Lot, nil
 }
 
-// assignNewSpace 分配新车位
+// assignNewSpace 分配新车位（使用非事务DB，用于兼容旧代码）
 func assignNewSpace(spaceType string) (*model.ParkingSpace, *model.ParkingLot, error) {
+	return assignNewSpaceWithTx(inits.DB, spaceType)
+}
+
+// assignNewSpaceWithTx 分配新车位（支持事务）
+func assignNewSpaceWithTx(db *gorm.DB, spaceType string) (*model.ParkingSpace, *model.ParkingLot, error) {
 	// 查找指定类型的可用车位
 	var space model.ParkingSpace
-	err := inits.DB.
+	err := db.
 		Where("space_type = ?", spaceType).
 		Where("is_occupied = ?", 0). // 未被占用
 		Where("is_reserved = ?", 0). // 未被预订
@@ -286,7 +297,7 @@ func assignNewSpace(spaceType string) (*model.ParkingSpace, *model.ParkingLot, e
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			// 如果没有指定类型的车位，尝试分配普通车位
 			if spaceType != "普通" {
-				return assignNewSpace("普通")
+				return assignNewSpaceWithTx(db, "普通")
 			}
 			return nil, nil, errors.New("没有可用车位")
 		}
@@ -358,8 +369,10 @@ func GetUserActiveParkingRecords(c *gin.Context) {
 		return
 	}
 
+	// 如果没有记录，返回空数组而不是404，这是RESTful API的最佳实践
+	// 404应该用于资源不存在（如用户不存在），而不是查询结果为空
 	if len(records) == 0 {
-		c.JSON(http.StatusNotFound, gin.H{"error": "未找到在场停车记录"})
+		c.JSON(http.StatusOK, []model.ParkingRecord{})
 		return
 	}
 
@@ -569,17 +582,23 @@ func VehicleExit(c *gin.Context) {
 		return
 	}
 
-	// 4. 查找关联的预约记录
-	reservation, err := findActiveReservation(record.VehicleID, record.EntryTime)
+	// 4. 查找关联的预约记录（使用事务查询）
+	reservation, err := findActiveReservationWithTx(tx, record.VehicleID, record.EntryTime)
 	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		tx.Rollback()
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "查询预约信息失败"})
 		return
 	}
 
-	// 5. 如果有预约，更新预约状态
+	// 5. 如果有预约，更新预约状态为已完成
 	if reservation != nil {
-		if err := updateReservationStatus(tx, reservation.OrderID, 3); err != nil { // 3-已完成
+		actualEndTime := exitTime
+		if err := tx.Model(&model.ReservationOrder{}).
+			Where("order_id = ?", reservation.OrderID).
+			Updates(map[string]interface{}{
+				"status":          3, // 3-已完成
+				"actual_end_time": &actualEndTime,
+			}).Error; err != nil {
 			tx.Rollback()
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "更新预约状态失败"})
 			return
@@ -608,10 +627,14 @@ func VehicleExit(c *gin.Context) {
 	)
 	if err != nil {
 		log.Printf("生成支付链接失败: %v", err)
+		// 即使支付创建失败，也返回离场成功，但提示用户需要手动支付
+		// 前端可以根据PaymentURL是否为空来判断是否需要手动创建支付
+		redirectURL = ""
+		paymentID = 0
+	} else {
+		// 记录 paymentID 用于调试
+		log.Printf("生成的支付ID: %d", paymentID)
 	}
-
-	// 记录 paymentID 用于调试
-	log.Printf("生成的支付ID: %d", paymentID)
 
 	// 构建响应
 	resp := VehicleExitResponse{
@@ -632,23 +655,45 @@ func VehicleExit(c *gin.Context) {
 
 }
 
-// findActiveReservation 查找有效的预约
+// findActiveReservation 查找有效的预约（使用非事务DB，用于兼容旧代码）
 func findActiveReservation(vehicleID uint, entryTime time.Time) (*model.ReservationOrder, error) {
+	return findActiveReservationWithTx(inits.DB, vehicleID, entryTime)
+}
+
+// findActiveReservationWithTx 查找有效的预约（支持事务）
+// 查找与停车记录关联的预约，优先查找状态为使用中的，如果没有则查找已预订的
+func findActiveReservationWithTx(db *gorm.DB, vehicleID uint, entryTime time.Time) (*model.ReservationOrder, error) {
 	var reservation model.ReservationOrder
 
-	// 查找入场时间在预约时间段内且状态为使用中的预约
-	err := inits.DB.
+	// 先尝试查找状态为使用中的预约
+	err := db.
 		Where("vehicle_id = ?", vehicleID).
 		Where("start_time <= ? AND end_time >= ?", entryTime, entryTime).
-		Where("status = ?", 2). // 2-使用中
+		Where("status = ?", 2).   // 2-使用中
+		Order("start_time DESC"). // 如果有多个，选择最晚开始的
 		First(&reservation).Error
 
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, nil
-		}
-		return nil, err
+	if err == nil {
+		return &reservation, nil
 	}
 
-	return &reservation, nil
+	// 如果没找到使用中的，尝试查找已预订的预约（可能入场时状态更新失败）
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		err = db.
+			Where("vehicle_id = ?", vehicleID).
+			Where("start_time <= ? AND end_time >= ?", entryTime, entryTime).
+			Where("status = ?", 1). // 1-已预订
+			Order("start_time DESC").
+			First(&reservation).Error
+
+		if err == nil {
+			return &reservation, nil
+		}
+	}
+
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+
+	return nil, err
 }

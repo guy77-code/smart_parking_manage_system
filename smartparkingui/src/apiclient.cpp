@@ -75,31 +75,42 @@ QJsonObject ApiClient::parseResponse(QNetworkReply *reply)
     int httpStatus = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
     result["http_status"] = httpStatus;
     
-    if (reply->error() != QNetworkReply::NoError) {
-        result["error"] = reply->errorString();
-        return result;
-    }
-
     QByteArray data = reply->readAll();
-    if (data.isEmpty()) {
-        return result;
-    }
-    
-    QJsonParseError error;
-    QJsonDocument doc = QJsonDocument::fromJson(data, &error);
+    if (!data.isEmpty()) {
+        QJsonParseError error;
+        QJsonDocument doc = QJsonDocument::fromJson(data, &error);
 
-    if (error.error != QJsonParseError::NoError) {
-        result["error"] = "JSON parse error: " + error.errorString();
-        return result;
+        if (error.error == QJsonParseError::NoError) {
+            if (doc.isObject()) {
+                result = doc.object();
+            } else if (doc.isArray()) {
+                result["data"] = doc.array();
+            }
+        } else {
+            result["raw"] = QString::fromUtf8(data);
+            result["parse_error"] = error.errorString();
+        }
     }
 
-    if (doc.isObject()) {
-        result = doc.object();
-        result["http_status"] = httpStatus;
-    } else if (doc.isArray()) {
-        result["data"] = doc.array();
-        result["http_status"] = httpStatus;
+    if (reply->error() != QNetworkReply::NoError) {
+        // Prefer backend message when available
+        if (!result.contains("error") && result.contains("message")) {
+            result["error"] = result.value("message").toString();
+        }
+        if (!result.contains("error")) {
+            result["error"] = reply->errorString();
+        } else {
+            result["network_error"] = reply->errorString();
+        }
+    } else if (httpStatus >= 400) {
+        if (result.contains("message")) {
+            result["error"] = result.value("message").toString();
+        } else if (!result.contains("error")) {
+            result["error"] = QString("HTTP %1").arg(httpStatus);
+        }
     }
+
+    result["http_status"] = httpStatus;
 
     return result;
 }
@@ -130,6 +141,18 @@ void ApiClient::onRequestFinished(QNetworkReply *reply)
             emit loginSuccess(userData, token);
         } else if (url.contains("/api/v1/register")) {
             emit registerSuccess(response);
+        } else if (url.contains("/api/v1/vehicles")) {
+            QJsonArray vehicles;
+            if (response.contains("data") && response["data"].isArray()) {
+                vehicles = response["data"].toArray();
+            } else if (response.contains("data") && response["data"].isObject()) {
+                // 兼容意外包了一层对象的情况
+                QJsonObject dataObj = response["data"].toObject();
+                if (dataObj.contains("data") && dataObj["data"].isArray()) {
+                    vehicles = dataObj["data"].toArray();
+                }
+            }
+            emit userVehiclesReceived(vehicles);
         } else if (url.contains("/api/v2/getparkinglots")) {
             QJsonArray lots;
             if (response.contains("data")) {
@@ -145,9 +168,12 @@ void ApiClient::onRequestFinished(QNetworkReply *reply)
             emit parkingLotsReceived(lots);
         } else if (url.contains("/active-parking")) {
             QJsonArray records;
+            // 后端直接返回数组（当有记录时）或空数组（当无记录时）
+            // parseResponse会将数组包装在response对象中，key为"data"
             if (response.contains("data") && response["data"].isArray()) {
                 records = response["data"].toArray();
             }
+            // 如果没有data字段，说明可能是空响应或其他格式，返回空数组
             emit activeParkingRecordsReceived(records);
         } else if (url.contains("/getpaymentinfo")) {
             emit paymentRecordsReceived(response);
@@ -216,6 +242,34 @@ void ApiClient::getUserPaymentRecords(int page, int pageSize)
 {
     QString endpoint = QString("/api/v1/getpaymentinfo?page=%1&page_size=%2").arg(page).arg(pageSize);
     makeRequest("GET", endpoint);
+}
+
+void ApiClient::getUserVehicles()
+{
+    makeRequest("GET", "/api/v1/vehicles");
+}
+
+void ApiClient::addUserVehicle(const QString &licensePlate,
+                               const QString &brand,
+                               const QString &model,
+                               const QString &color)
+{
+    QJsonObject data;
+    data["license_plate"] = licensePlate;
+    if (!brand.isEmpty())
+        data["brand"] = brand;
+    if (!model.isEmpty())
+        data["model"] = model;
+    if (!color.isEmpty())
+        data["color"] = color;
+    makeRequest("POST", "/api/v1/vehicles", data);
+}
+
+void ApiClient::deleteUserVehicle(int vehicleId)
+{
+    if (vehicleId <= 0)
+        return;
+    makeRequest("DELETE", QString("/api/v1/vehicles/%1").arg(vehicleId));
 }
 
 // Parking APIs
@@ -323,7 +377,7 @@ void ApiClient::deleteParkingSpace(int spaceId)
 }
 
 // Booking APIs
-void ApiClient::createBooking(int userId, int vehicleId, int lotId, const QString &startTime, const QString &endTime)
+void ApiClient::createBooking(int userId, int vehicleId, int lotId, const QString &startTime, const QString &endTime, const QString &spaceType)
 {
     QJsonObject data;
     data["user_id"] = userId;
@@ -331,6 +385,9 @@ void ApiClient::createBooking(int userId, int vehicleId, int lotId, const QStrin
     data["lot_id"] = lotId;
     data["start_time"] = startTime;
     data["end_time"] = endTime;
+    if (!spaceType.isEmpty()) {
+        data["space_type"] = spaceType;
+    }
     makeRequest("POST", "/api/v4/booking/create", data);
 }
 
@@ -349,13 +406,16 @@ void ApiClient::getBookingDetail(int orderId)
     makeRequest("GET", QString("/api/v4/booking/detail/%1").arg(orderId));
 }
 
+void ApiClient::checkAndUpdateExpiredBookings()
+{
+    makeRequest("POST", "/api/v4/booking/check-expired");
+}
+
 // Violation APIs
 void ApiClient::getUserViolations(int userId, int status)
 {
+    // status参数已废弃，后端默认返回所有违规记录
     QString endpoint = QString("/api/violations/checkmyself/%1").arg(userId);
-    if (status >= 0) {
-        endpoint += QString("?status=%1").arg(status);
-    }
     makeRequest("GET", endpoint);
 }
 

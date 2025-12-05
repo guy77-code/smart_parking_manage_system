@@ -1,6 +1,7 @@
 import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
+import QtCharts 2.15
 import SmartParking 1.0
 
 Page {
@@ -70,17 +71,13 @@ Page {
                         RowLayout {
                             Layout.fillWidth: true
                             Text { text: "开始时间:" }
-                            TextField {
-                                id: startTimeField
-                                Layout.fillWidth: true
-                                placeholderText: "2025-01-01T00:00:00Z"
-                            }
+                            SpinBox { id: startYear; from: 2020; to: 2100; value: new Date().getFullYear() }
+                            SpinBox { id: startMonth; from: 1; to: 12; value: new Date().getMonth() + 1 }
+                            SpinBox { id: startDay; from: 1; to: 31; value: new Date().getDate() }
                             Text { text: "结束时间:" }
-                            TextField {
-                                id: endTimeField
-                                Layout.fillWidth: true
-                                placeholderText: "2025-01-31T23:59:59Z"
-                            }
+                            SpinBox { id: endYear; from: 2020; to: 2100; value: new Date().getFullYear() }
+                            SpinBox { id: endMonth; from: 1; to: 12; value: new Date().getMonth() + 1 }
+                            SpinBox { id: endDay; from: 1; to: 31; value: new Date().getDate() }
                             Button {
                                 text: "查询"
                                 onClicked: {
@@ -88,50 +85,8 @@ Page {
                                         occupancyDataText = "当前登录为系统管理员账号，车位使用率分析仅支持停车场管理员。"
                                         return
                                     }
-                                    // 允许输入日期或完整时间，自动转换为RFC3339
-                                    function normalizeTime(t, isEnd) {
-                                        if (!t || t.length === 0)
-                                            return ""
-                                        // 如果已经包含T，直接返回
-                                        if (t.indexOf("T") >= 0)
-                                            return t
-                                        // 确保日期格式为 YYYY-MM-DD（补零并验证有效性）
-                                        var parts = t.split("-")
-                                        if (parts.length === 3) {
-                                            var year = parseInt(parts[0])
-                                            var month = parseInt(parts[1].length === 1 ? "0" + parts[1] : parts[1])
-                                            var day = parseInt(parts[2].length === 1 ? "0" + parts[2] : parts[2])
-                                            
-                                            // 验证日期有效性
-                                            var daysInMonth = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
-                                            // 检查闰年
-                                            if (month === 2 && ((year % 4 === 0 && year % 100 !== 0) || year % 400 === 0)) {
-                                                daysInMonth[1] = 29
-                                            }
-                                            
-                                            if (month < 1 || month > 12) {
-                                                console.log("无效的月份:", month)
-                                                return ""
-                                            }
-                                            
-                                            if (day < 1 || day > daysInMonth[month - 1]) {
-                                                console.log("无效的日期:", day, "月份:", month)
-                                                // 如果是结束日期且日期无效，使用该月最后一天
-                                                if (isEnd) {
-                                                    day = daysInMonth[month - 1]
-                                                } else {
-                                                    return ""
-                                                }
-                                            }
-                                            
-                                            var monthStr = month < 10 ? "0" + month : "" + month
-                                            var dayStr = day < 10 ? "0" + day : "" + day
-                                            t = year + "-" + monthStr + "-" + dayStr
-                                        }
-                                        return t + (isEnd ? "T23:59:59Z" : "T00:00:00Z")
-                                    }
-                                    var start = normalizeTime(startTimeField.text, false)
-                                    var end = normalizeTime(endTimeField.text, true)
+                                    var start = formatDateTime(startYear, startMonth, startDay, false)
+                                    var end = formatDateTime(endYear, endMonth, endDay, true)
                                     if (start && end) {
                                         apiClient.getOccupancyAnalysis(start, end)
                                     } else {
@@ -193,6 +148,21 @@ Page {
                                         }
                                     }
                                 }
+                            }
+                        }
+
+                        // 使用率图表（饼图）
+                        ChartView {
+                            id: occupancyChart
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 300
+                            antialiasing: true
+                            title: "车位使用率分布"
+                            legend.alignment: Qt.AlignBottom
+                            visible: occupancyPie.count > 0
+
+                            PieSeries {
+                                id: occupancyPie
                             }
                         }
                         
@@ -299,6 +269,36 @@ Page {
                                         }
                                     }
                                 }
+                            }
+                        }
+
+                        // 违规类型分布图（饼图）
+                        ChartView {
+                            id: violationTypeChart
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 280
+                            antialiasing: true
+                            title: "违规类型分布"
+                            legend.alignment: Qt.AlignBottom
+                            visible: violationTypePie.count > 0
+
+                            PieSeries {
+                                id: violationTypePie
+                            }
+                        }
+
+                        // 违规状态分布图（饼图）
+                        ChartView {
+                            id: violationStatusChart
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 240
+                            antialiasing: true
+                            title: "违规状态分布"
+                            legend.alignment: Qt.AlignBottom
+                            visible: violationStatusPie.count > 0
+
+                            PieSeries {
+                                id: violationStatusPie
                             }
                         }
                         
@@ -427,6 +427,18 @@ Page {
         }
     }
 
+    // 将年月日 SpinBox 组合转换为 RFC3339 字符串（起始/结束日）
+    function formatDateTime(y, m, d, isEnd) {
+        if (!y || !m || !d)
+            return ""
+        function pad2(n) { return n < 10 ? "0" + n : "" + n }
+        var year = y.value
+        var month = pad2(m.value)
+        var day = pad2(d.value)
+        var timePart = isEnd ? "23:59:59" : "00:00:00"
+        return year + "-" + month + "-" + day + "T" + timePart + "Z"
+    }
+
     Connections {
         target: apiClient
 
@@ -478,6 +490,8 @@ Page {
                 } else {
                     occupancyDataText = ""
                 }
+
+                updateOccupancyChart(data)
             } else if (url.indexOf("/admin/violations") >= 0) {
                 // 违规行为分析
                 violationModel.clear()
@@ -525,6 +539,8 @@ Page {
                 } else {
                     violationDataText = ""
                 }
+
+                updateViolationCharts(vData)
             } else if (url.indexOf("/admin/report") >= 0) {
                 // 报表生成
                 reportModel.clear()
@@ -586,6 +602,64 @@ Page {
                 }
             }
         }
+    }
+
+    // 更新车位使用率饼图
+    function updateOccupancyChart(data) {
+        occupancyPie.clear()
+        var hasData = false
+
+        function appendSlice(label, value) {
+            if (value !== undefined && value !== null && !isNaN(value) && Number(value) >= 0) {
+                occupancyPie.append(label, Number(value))
+                hasData = true
+            }
+        }
+
+        appendSlice("已占用", data.occupied_spaces)
+        appendSlice("已预订", data.reserved_spaces)
+        // 剩余车位 = 总车位 - 已占用 - 已预订（若可计算）
+        if (data.total_spaces !== undefined && data.occupied_spaces !== undefined && data.reserved_spaces !== undefined) {
+            var remaining = Number(data.total_spaces) - Number(data.occupied_spaces) - Number(data.reserved_spaces)
+            if (!isNaN(remaining) && remaining >= 0) {
+                appendSlice("空闲", remaining)
+            }
+        }
+
+        occupancyChart.visible = hasData
+    }
+
+    // 更新违规分析饼图
+    function updateViolationCharts(vData) {
+        violationTypePie.clear()
+        violationStatusPie.clear()
+
+        var hasType = false
+        var hasStatus = false
+
+        if (vData.violations_by_type && Array.isArray(vData.violations_by_type)) {
+            for (var i = 0; i < vData.violations_by_type.length; i++) {
+                var vt = vData.violations_by_type[i]
+                if (vt && vt.violation_type !== undefined && vt.count !== undefined && !isNaN(vt.count)) {
+                    violationTypePie.append(vt.violation_type, Number(vt.count))
+                    hasType = true
+                }
+            }
+        }
+
+        if (vData.violations_by_status && Array.isArray(vData.violations_by_status)) {
+            for (var j = 0; j < vData.violations_by_status.length; j++) {
+                var vs = vData.violations_by_status[j]
+                if (vs && vs.status !== undefined && vs.count !== undefined && !isNaN(vs.count)) {
+                    var statusText = vs.status === 0 ? "未处理" : "已处理"
+                    violationStatusPie.append(statusText, Number(vs.count))
+                    hasStatus = true
+                }
+            }
+        }
+
+        violationTypeChart.visible = hasType
+        violationStatusChart.visible = hasStatus
     }
 }
 

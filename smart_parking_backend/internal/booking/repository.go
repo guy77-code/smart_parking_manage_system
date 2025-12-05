@@ -79,11 +79,26 @@ func (r *Repository) UpdatePayment(p *model.PaymentRecord) error {
 
 // ==================== 车位（ParkingSpace）操作 ====================
 
-func (r *Repository) FindAvailableSlot(lotID uint) (*model.ParkingSpace, error) {
+func (r *Repository) FindAvailableSlot(lotID uint, spaceType string) (*model.ParkingSpace, error) {
 	var space model.ParkingSpace
-	err := inits.DB.Where("lot_id = ? AND is_reserved = 0 AND is_occupied = 0 AND status = 1", lotID).
-		First(&space).Error
+	query := inits.DB.Where("lot_id = ? AND is_reserved = 0 AND is_occupied = 0 AND status = 1", lotID)
+	
+	// 如果指定了车位类型，优先查找该类型的车位
+	if spaceType != "" && spaceType != "普通" {
+		query = query.Where("space_type = ?", spaceType)
+	}
+	
+	err := query.First(&space).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
+		// 如果指定了类型但找不到，尝试查找普通车位
+		if spaceType != "" && spaceType != "普通" {
+			var normalSpace model.ParkingSpace
+			err2 := inits.DB.Where("lot_id = ? AND is_reserved = 0 AND is_occupied = 0 AND status = 1 AND space_type = ?", lotID, "普通").
+				First(&normalSpace).Error
+			if err2 == nil {
+				return &normalSpace, nil
+			}
+		}
 		return nil, errors.New("no available parking space")
 	}
 	return &space, err

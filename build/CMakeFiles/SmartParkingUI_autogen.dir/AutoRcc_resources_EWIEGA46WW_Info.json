@@ -14,6 +14,7 @@
 		"/home/ubuntu/smartparkingproject/smartparkingui/ui/UserMainPage.qml",
 		"/home/ubuntu/smartparkingproject/smartparkingui/ui/BookingPage.qml",
 		"/home/ubuntu/smartparkingproject/smartparkingui/ui/OrderHistoryPage.qml",
+		"/home/ubuntu/smartparkingproject/smartparkingui/ui/ParkingEntryPage.qml",
 		"/home/ubuntu/smartparkingproject/smartparkingui/ui/PaymentPage.qml",
 		"/home/ubuntu/smartparkingproject/smartparkingui/ui/LoginPage.qml",
 		"/home/ubuntu/smartparkingproject/smartparkingui/ui/main.qml"

@@ -195,6 +195,32 @@ Page {
         return "green"  // Available
     }
 
+    function sanitizeSpace(space) {
+        if (!space || typeof space !== "object")
+            return null
+
+        var spaceId = space.space_id !== undefined ? space.space_id :
+                      (space.spaceId !== undefined ? space.spaceId :
+                      (space.SpaceID !== undefined ? space.SpaceID : 0))
+        return {
+            spaceId: spaceId,
+            space_id: spaceId,
+            level: space.level !== undefined ? space.level :
+                   (space.Level !== undefined ? space.Level : 1),
+            spaceNumber: space.space_number !== undefined ? space.space_number :
+                         (space.spaceNumber !== undefined ? space.spaceNumber : ""),
+            spaceType: space.space_type !== undefined ? space.space_type :
+                       (space.spaceType !== undefined ? space.spaceType : "普通"),
+            status: space.status !== undefined ? space.status : 1,
+            isOccupied: space.is_occupied !== undefined ? space.is_occupied :
+                        (space.isOccupied !== undefined ? space.isOccupied : 0),
+            isReserved: space.is_reserved !== undefined ? space.is_reserved :
+                        (space.isReserved !== undefined ? space.isReserved : 0),
+            lotId: space.lot_id !== undefined ? space.lot_id :
+                   (space.lotId !== undefined ? space.lotId : 0)
+        }
+    }
+
     function filterSpacesByLevel() {
         spaceModel.clear()
         for (var i = 0; i < allSpacesModel.count; i++) {
@@ -244,15 +270,19 @@ Page {
                 if (Array.isArray(spaces)) {
                     allSpacesModel.clear()
                     for (var i = 0; i < spaces.length; i++) {
-                        var space = spaces[i]
-                        allSpacesModel.append(space)
+                        var space = sanitizeSpace(spaces[i])
+                        if (space) {
+                            allSpacesModel.append(space)
+                        }
                     }
                     filterSpacesByLevel()
                 } else if (response.hasOwnProperty("data") && Array.isArray(response.data)) {
                     allSpacesModel.clear()
                     for (var j = 0; j < response.data.length; j++) {
-                        var space2 = response.data[j]
-                        allSpacesModel.append(space2)
+                        var space2 = sanitizeSpace(response.data[j])
+                        if (space2) {
+                            allSpacesModel.append(space2)
+                        }
                     }
                     filterSpacesByLevel()
                 }

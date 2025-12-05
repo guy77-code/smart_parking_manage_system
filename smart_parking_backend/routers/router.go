@@ -23,11 +23,15 @@ func InitRouter(bookingSvc *booking.Service, paymentCfg *payment.Service) *gin.E
 		api.POST("/register", controller.Register(inits.DB))
 		api.POST("/send_code", controller.SendLoginCode(inits.RedisClient))
 		api.POST("/login", controller.Login(inits.DB, inits.RedisClient))
-		
+
 		// 需要用户认证的路由
 		protectedUserGroup := api.Use(middleware.UserAuthMiddleware())
 		{
 			protectedUserGroup.GET("/getpaymentinfo", controller.GetUserPaymentRecords(inits.DB)) //从token获取user_id
+			// 获取 / 管理当前登录用户的车辆
+			protectedUserGroup.GET("/vehicles", controller.GetUserVehicles(inits.DB))
+			protectedUserGroup.POST("/vehicles", controller.AddUserVehicle(inits.DB))
+			protectedUserGroup.DELETE("/vehicles/:id", controller.DeleteUserVehicle(inits.DB))
 		}
 	}
 

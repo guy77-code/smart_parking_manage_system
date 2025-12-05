@@ -250,6 +250,13 @@ func Login(db *gorm.DB, rdb *redis.Client) gin.HandlerFunc {
 	}
 }
 
+// PaymentRecordWithDetails 带详细信息的支付记录响应结构
+type PaymentRecordWithDetails struct {
+	model.PaymentRecord
+	OrderType    string                 `json:"order_type"`    // "reservation", "parking", "violation"
+	OrderDetails map[string]interface{} `json:"order_details"` // 订单详细信息
+}
+
 func GetUserPaymentRecords(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// 从 Token 中解析 user_id
@@ -283,11 +290,360 @@ func GetUserPaymentRecords(db *gorm.DB) gin.HandlerFunc {
 			return
 		}
 
+		// 构建带详细信息的支付记录列表
+		var recordsWithDetails []PaymentRecordWithDetails
+		for _, payment := range payments {
+			record := PaymentRecordWithDetails{
+				PaymentRecord: payment,
+				OrderType:     "reservation", // 默认类型
+				OrderDetails:  make(map[string]interface{}),
+			}
+
+			// 根据TransactionNo判断订单类型
+			transactionNo := payment.TransactionNo
+			if len(transactionNo) >= 12 && transactionNo[:12] == "PENDING_VIO_" {
+				// 违规订单
+				record.OrderType = "violation"
+				var violation model.ViolationRecord
+				if err := db.Preload("Vehicle").Preload("Record").First(&violation, payment.OrderID).Error; err == nil {
+					record.OrderDetails["violation_id"] = violation.ViolationID
+					record.OrderDetails["violation_type"] = violation.ViolationType
+					record.OrderDetails["violation_time"] = violation.ViolationTime
+					record.OrderDetails["description"] = violation.Description
+					record.OrderDetails["fine_amount"] = violation.FineAmount
+					record.OrderDetails["status"] = violation.Status
+					if violation.Vehicle.VehicleID > 0 {
+						record.OrderDetails["vehicle"] = map[string]interface{}{
+							"vehicle_id":    violation.Vehicle.VehicleID,
+							"license_plate": violation.Vehicle.LicensePlate,
+							"brand":         violation.Vehicle.Brand,
+							"model":         violation.Vehicle.Model,
+							"color":         violation.Vehicle.Color,
+						}
+					}
+				}
+			} else if len(transactionNo) >= 8 && transactionNo[:8] == "PENDING_" {
+				// 可能是停车订单或预订订单，优先检查预订订单
+				if payment.Order.OrderID > 0 {
+					// 优先识别为预订订单（即使已进场，预订订单仍然是预订订单）
+					record.OrderType = "reservation"
+					record.OrderDetails["order_id"] = payment.Order.OrderID
+					record.OrderDetails["reservation_cod"] = payment.Order.ReservationCode
+					record.OrderDetails["start_time"] = payment.Order.StartTime
+					record.OrderDetails["end_time"] = payment.Order.EndTime
+					record.OrderDetails["status"] = payment.Order.Status
+					// 如果预订订单已进场，也包含停车记录信息
+					var parkingRecord model.ParkingRecord
+					if err := db.Preload("Vehicle").Preload("Lot").Preload("Space").
+						Where("vehicle_id = ?", payment.Order.VehicleID).
+						Where("record_status = ?", 1). // 在场记录
+						First(&parkingRecord).Error; err == nil {
+						record.OrderDetails["parking_record_id"] = parkingRecord.RecordID
+						record.OrderDetails["entry_time"] = parkingRecord.EntryTime
+						if parkingRecord.ExitTime != nil {
+							record.OrderDetails["exit_time"] = parkingRecord.ExitTime
+						}
+						record.OrderDetails["duration_minute"] = parkingRecord.DurationMinutes
+					}
+				} else {
+					// 没有预订订单，尝试查找停车记录
+					var parkingRecord model.ParkingRecord
+					if err := db.Preload("Vehicle").Preload("Lot").Preload("Space").First(&parkingRecord, payment.OrderID).Error; err == nil {
+						// 找到停车记录
+						record.OrderType = "parking"
+						record.OrderDetails["record_id"] = parkingRecord.RecordID
+						record.OrderDetails["entry_time"] = parkingRecord.EntryTime
+						if parkingRecord.ExitTime != nil {
+							record.OrderDetails["exit_time"] = parkingRecord.ExitTime
+						}
+						record.OrderDetails["duration_minute"] = parkingRecord.DurationMinutes
+						record.OrderDetails["fee_calculated"] = parkingRecord.FeeCalculated
+						if parkingRecord.Lot.LotID > 0 {
+							record.OrderDetails["lot"] = map[string]interface{}{
+								"lot_id":  parkingRecord.Lot.LotID,
+								"name":    parkingRecord.Lot.Name,
+								"address": parkingRecord.Lot.Address,
+							}
+						}
+						if parkingRecord.Vehicle.VehicleID > 0 {
+							record.OrderDetails["vehicle"] = map[string]interface{}{
+								"vehicle_id":    parkingRecord.Vehicle.VehicleID,
+								"license_plate": parkingRecord.Vehicle.LicensePlate,
+								"brand":         parkingRecord.Vehicle.Brand,
+								"model":         parkingRecord.Vehicle.Model,
+								"color":         parkingRecord.Vehicle.Color,
+							}
+						}
+					}
+				}
+			} else {
+				// 没有PENDING前缀，可能是已支付的订单，通过OrderID查找
+				// 优先检查预订订单
+				if payment.Order.OrderID > 0 {
+					record.OrderType = "reservation"
+					record.OrderDetails["order_id"] = payment.Order.OrderID
+					record.OrderDetails["reservation_cod"] = payment.Order.ReservationCode
+					record.OrderDetails["start_time"] = payment.Order.StartTime
+					record.OrderDetails["end_time"] = payment.Order.EndTime
+					record.OrderDetails["status"] = payment.Order.Status
+					// 如果预订订单已完成，可能有关联的停车记录
+					if payment.Order.Status == 3 && payment.Order.ActualEndTime != nil {
+						var parkingRecord model.ParkingRecord
+						if err := db.Preload("Vehicle").Preload("Lot").Preload("Space").
+							Where("vehicle_id = ?", payment.Order.VehicleID).
+							Where("exit_time IS NOT NULL").
+							Order("exit_time DESC").
+							First(&parkingRecord).Error; err == nil {
+							record.OrderDetails["parking_record_id"] = parkingRecord.RecordID
+							record.OrderDetails["entry_time"] = parkingRecord.EntryTime
+							if parkingRecord.ExitTime != nil {
+								record.OrderDetails["exit_time"] = parkingRecord.ExitTime
+							}
+							record.OrderDetails["duration_minute"] = parkingRecord.DurationMinutes
+						}
+					}
+				} else {
+					// 尝试查找停车记录
+					var parkingRecord model.ParkingRecord
+					if err := db.Preload("Vehicle").Preload("Lot").Preload("Space").First(&parkingRecord, payment.OrderID).Error; err == nil {
+						record.OrderType = "parking"
+						record.OrderDetails["record_id"] = parkingRecord.RecordID
+						record.OrderDetails["entry_time"] = parkingRecord.EntryTime
+						if parkingRecord.ExitTime != nil {
+							record.OrderDetails["exit_time"] = parkingRecord.ExitTime
+						}
+						record.OrderDetails["duration_minute"] = parkingRecord.DurationMinutes
+						record.OrderDetails["fee_calculated"] = parkingRecord.FeeCalculated
+						if parkingRecord.Lot.LotID > 0 {
+							record.OrderDetails["lot"] = map[string]interface{}{
+								"lot_id":  parkingRecord.Lot.LotID,
+								"name":    parkingRecord.Lot.Name,
+								"address": parkingRecord.Lot.Address,
+							}
+						}
+						if parkingRecord.Vehicle.VehicleID > 0 {
+							record.OrderDetails["vehicle"] = map[string]interface{}{
+								"vehicle_id":    parkingRecord.Vehicle.VehicleID,
+								"license_plate": parkingRecord.Vehicle.LicensePlate,
+								"brand":         parkingRecord.Vehicle.Brand,
+								"model":         parkingRecord.Vehicle.Model,
+								"color":         parkingRecord.Vehicle.Color,
+							}
+						}
+					} else {
+						// 尝试查找违规记录
+						var violation model.ViolationRecord
+						if err := db.Preload("Vehicle").Preload("Record").First(&violation, payment.OrderID).Error; err == nil {
+							record.OrderType = "violation"
+							record.OrderDetails["violation_id"] = violation.ViolationID
+							record.OrderDetails["violation_type"] = violation.ViolationType
+							record.OrderDetails["violation_time"] = violation.ViolationTime
+							record.OrderDetails["description"] = violation.Description
+							record.OrderDetails["fine_amount"] = violation.FineAmount
+							record.OrderDetails["status"] = violation.Status
+							if violation.Vehicle.VehicleID > 0 {
+								record.OrderDetails["vehicle"] = map[string]interface{}{
+									"vehicle_id":    violation.Vehicle.VehicleID,
+									"license_plate": violation.Vehicle.LicensePlate,
+									"brand":         violation.Vehicle.Brand,
+									"model":         violation.Vehicle.Model,
+									"color":         violation.Vehicle.Color,
+								}
+							}
+						}
+					}
+				}
+			}
+
+			recordsWithDetails = append(recordsWithDetails, record)
+		}
+
 		c.JSON(http.StatusOK, gin.H{
 			"total":     total,
 			"page":      page,
 			"page_size": pageSize,
-			"records":   payments,
+			"records":   recordsWithDetails,
+		})
+	}
+}
+
+// GetUserVehicles 获取当前登录用户的车辆列表
+// 路由：GET /api/v1/vehicles （需 UserAuthMiddleware 注入 user_id）
+func GetUserVehicles(db *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// 从 Token 中解析 user_id
+		userIDVal, exists := c.Get("user_id")
+		if !exists {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "未授权，请先登录"})
+			return
+		}
+
+		var userID uint
+		switch v := userIDVal.(type) {
+		case uint:
+			userID = v
+		case int:
+			if v > 0 {
+				userID = uint(v)
+			}
+		case int64:
+			if v > 0 {
+				userID = uint(v)
+			}
+		default:
+			c.JSON(http.StatusBadRequest, gin.H{"error": "无效的用户ID"})
+			return
+		}
+
+		var vehicles []model.Vehicle
+		if err := db.Where("user_id = ?", userID).Find(&vehicles).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "查询车辆信息失败"})
+			return
+		}
+
+		// 构造与登录接口类似的车辆返回结构（使用 snake_case 字段名）
+		var vehicleList []gin.H
+		for _, v := range vehicles {
+			vehicleList = append(vehicleList, gin.H{
+				"vehicle_id":    v.VehicleID,
+				"license_plate": v.LicensePlate,
+				"brand":         v.Brand,
+				"model":         v.Model,
+				"color":         v.Color,
+			})
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"total": len(vehicleList),
+			"data":  vehicleList,
+		})
+	}
+}
+
+// AddUserVehicle 为当前登录用户添加一辆车辆
+// 路由：POST /api/v1/vehicles
+func AddUserVehicle(db *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// 从 Token 中解析 user_id
+		userIDVal, exists := c.Get("user_id")
+		if !exists {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "未授权，请先登录"})
+			return
+		}
+
+		var userID uint
+		switch v := userIDVal.(type) {
+		case uint:
+			userID = v
+		case int:
+			if v > 0 {
+				userID = uint(v)
+			}
+		case int64:
+			if v > 0 {
+				userID = uint(v)
+			}
+		default:
+			c.JSON(http.StatusBadRequest, gin.H{"error": "无效的用户ID"})
+			return
+		}
+
+		var req struct {
+			LicensePlate string `json:"license_plate" binding:"required"`
+			Brand        string `json:"brand"`
+			Model        string `json:"model"`
+			Color        string `json:"color"`
+		}
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+
+		// 简单校验车牌号
+		if req.LicensePlate == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "车牌号不能为空"})
+			return
+		}
+
+		vehicle := model.Vehicle{
+			UserID:       userID,
+			LicensePlate: req.LicensePlate,
+			Brand:        req.Brand,
+			Model:        req.Model,
+			Color:        req.Color,
+			AddTime:      time.Now(),
+		}
+
+		if err := db.Create(&vehicle).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "添加车辆失败: " + err.Error()})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"message": "车辆添加成功",
+			"vehicle": gin.H{
+				"vehicle_id":    vehicle.VehicleID,
+				"license_plate": vehicle.LicensePlate,
+				"brand":         vehicle.Brand,
+				"model":         vehicle.Model,
+				"color":         vehicle.Color,
+			},
+		})
+	}
+}
+
+// DeleteUserVehicle 删除当前登录用户的一辆车辆
+// 路由：DELETE /api/v1/vehicles/:id
+func DeleteUserVehicle(db *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// 从 Token 中解析 user_id
+		userIDVal, exists := c.Get("user_id")
+		if !exists {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "未授权，请先登录"})
+			return
+		}
+
+		var userID uint
+		switch v := userIDVal.(type) {
+		case uint:
+			userID = v
+		case int:
+			if v > 0 {
+				userID = uint(v)
+			}
+		case int64:
+			if v > 0 {
+				userID = uint(v)
+			}
+		default:
+			c.JSON(http.StatusBadRequest, gin.H{"error": "无效的用户ID"})
+			return
+		}
+
+		vehicleIDStr := c.Param("id")
+		if vehicleIDStr == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "车辆ID不能为空"})
+			return
+		}
+
+		var vehicle model.Vehicle
+		if err := db.Where("vehicle_id = ? AND user_id = ?", vehicleIDStr, userID).First(&vehicle).Error; err != nil {
+			if err == gorm.ErrRecordNotFound {
+				c.JSON(http.StatusNotFound, gin.H{"error": "车辆不存在"})
+				return
+			}
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "查询车辆失败"})
+			return
+		}
+
+		if err := db.Delete(&vehicle).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "删除车辆失败"})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"message":    "车辆删除成功",
+			"vehicle_id": vehicle.VehicleID,
 		})
 	}
 }

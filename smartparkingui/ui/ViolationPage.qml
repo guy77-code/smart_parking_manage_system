@@ -33,10 +33,20 @@ Page {
             Item { Layout.fillWidth: true }
         }
 
-        Text {
-            text: "违规记录"
-            font.pixelSize: 24
-            font.bold: true
+        RowLayout {
+            Layout.fillWidth: true
+            Text {
+                text: "违规记录"
+                font.pixelSize: 24
+                font.bold: true
+            }
+            Item { Layout.fillWidth: true }
+            Button {
+                text: "刷新"
+                onClicked: {
+                    loadViolations()
+                }
+            }
         }
 
         ListView {
@@ -95,8 +105,16 @@ Page {
                                     stackView.push(Qt.resolvedUrl("PaymentPage.qml"), {
                                         orderId: violationId,
                                         orderType: "violation",
+                                        orderTypeSequence: ["violation", "parking", "reservation"],
                                         amount: fineAmount,
-                                        stackView: stackView
+                                        stackView: stackView,
+                                        onPaymentSucceeded: function(type, paidOrderId) {
+                                            console.log("Payment succeeded for violation:", paidOrderId)
+                                            // 延迟刷新，确保后端数据已更新
+                                            Qt.callLater(function() {
+                                                loadViolations()
+                                            })
+                                        }
                                     })
                                 } else if (violationId > 0) {
                                     // 如果没有stackView，使用旧的API方式
@@ -121,7 +139,8 @@ Page {
     }
     
     function loadViolations() {
-        apiClient.getUserViolations(userId)
+        // status参数已废弃，后端默认返回所有违规记录，这里传0作为占位
+        apiClient.getUserViolations(userId, 0)
     }
 
     Connections {
@@ -242,7 +261,14 @@ Page {
                         orderType: "violation",
                         amount: violationAmount,
                         paymentId: paymentId,
-                        stackView: stackView
+                        stackView: stackView,
+                        onPaymentSucceeded: function(orderType, paidOrderId) {
+                            console.log("Payment succeeded for violation:", paidOrderId)
+                            // 延迟刷新，确保后端数据已更新
+                            Qt.callLater(function() {
+                                loadViolations()
+                            })
+                        }
                     })
                 }
             } else if (url.indexOf("/payment/notify") >= 0) {

@@ -166,14 +166,189 @@
           "order_id": 1,
           "reservation_cod": "R202501020001",
           "...": "..."
+        },
+        "order_type": "parking",
+        "order_details": {
+          "record_id": 1,
+          "entry_time": "2025-01-02T10:00:00Z",
+          "exit_time": "2025-01-02T12:30:00Z",
+          "duration_minute": 150,
+          "fee_calculated": 10.5,
+          "lot": {
+            "lot_id": 1,
+            "name": "智慧城市中心停车场",
+            "address": "北京市朝阳区建国路100号"
+          },
+          "vehicle": {
+            "vehicle_id": 1,
+            "license_plate": "粤A12345",
+            "brand": "特斯拉",
+            "model": "Model 3",
+            "color": "白色"
+          }
         }
       }
     ]
   }
   ```
+- **响应字段说明**：
+  - `order_type`：订单类型，可能的值：
+    - `"reservation"`：预订订单
+    - `"parking"`：停车订单
+    - `"violation"`：违规订单
+  - `order_details`：订单详细信息，根据 `order_type` 不同而不同：
+    - **预订订单** (`order_type="reservation"`)：
+      - `order_id`：预订订单ID
+      - `reservation_cod`：预订编号
+      - `start_time`：预订开始时间
+      - `end_time`：预订结束时间
+      - `status`：预订状态（**重要**）
+        - `0`：已取消
+        - `1`：已预订
+        - `2`：使用中（车辆已进场）
+        - `3`：已完成（车辆已离场）
+      - `entry_time`：入场时间（当状态为使用中或已完成时存在）
+      - `exit_time`：离场时间（当状态为已完成时存在）
+      - `duration_minute`：停车时长（分钟，当状态为使用中或已完成时存在）
+    - **停车订单** (`order_type="parking"`)：
+      - `record_id`：停车记录ID
+      - `entry_time`：入场时间
+      - `exit_time`：离场时间（如果已离场）
+      - `duration_minute`：停车时长（分钟）
+      - `fee_calculated`：计算出的费用
+      - `lot`：停车场信息（`lot_id`, `name`, `address`）
+      - `vehicle`：车辆信息（`vehicle_id`, `license_plate`, `brand`, `model`, `color`）
+    - **违规订单** (`order_type="violation"`)：
+      - `violation_id`：违规记录ID
+      - `violation_type`：违规类型
+      - `violation_time`：违规时间
+      - `description`：违规描述
+      - `fine_amount`：罚款金额
+      - `status`：违规处理状态（0-未处理，1-已处理）
+      - `vehicle`：车辆信息
+    - `"violation"`：违规订单
+  - `order_details`：订单详细信息，根据订单类型不同包含不同字段：
+    - **停车订单（parking）**：
+      - `record_id`：停车记录ID
+      - `entry_time`：入场时间
+      - `exit_time`：出场时间（可能为null）
+      - `duration_minute`：停车时长（分钟）
+      - `fee_calculated`：计算停车费
+      - `lot`：停车场信息（`lot_id`、`name`、`address`）
+      - `vehicle`：车辆信息（`vehicle_id`、`license_plate`、`brand`、`model`、`color`）
+    - **违规订单（violation）**：
+      - `violation_id`：违规记录ID
+      - `violation_type`：违规类型
+      - `violation_time`：违规时间
+      - `description`：违规事件描述
+      - `fine_amount`：罚款金额
+      - `status`：处理状态（0=未处理，1=已处理）
+      - `vehicle`：车辆信息（`vehicle_id`、`license_plate`、`brand`、`model`、`color`）
+    - **预订订单（reservation）**：
+      - `order_id`：预订订单ID
+      - `reservation_cod`：预订编号
+      - `start_time`：预订开始时间
+      - `end_time`：预订结束时间
+      - `status`：订单状态
 - **说明**：
   - 只返回当前用户（从 Token 提取的 `user_id`）相关的支付记录。
-  - 已预加载 `Order` 信息，前端可直接展示预约详情。
+  - 接口会根据支付记录的 `transaction_no` 字段和关联的订单记录自动判断订单类型，并查询对应的详细信息。
+  - **预订状态更新**：
+    - 当用户车辆在预订时间内进场时，预订状态会自动更新为 `2`（使用中）
+    - 当用户车辆离开停车场后，预订状态会自动更新为 `3`（已完成）
+    - 前端刷新订单列表时，会获取到最新的预订状态
+  - **订单类型识别**：
+    - 预订订单优先识别：如果支付记录关联了 `ReservationOrder`，即使该预订已进场或已完成，仍然识别为 `"reservation"` 类型
+    - 停车订单：仅当支付记录直接关联停车记录（无预订订单）时，识别为 `"parking"` 类型
+    - 违规订单：通过 `transaction_no` 前缀 `PENDING_VIO_` 识别
+  - **刷新功能**：前端可通过重新调用此接口实现订单记录刷新，建议保持当前分页参数（`page` 和 `page_size`）以维持用户浏览状态。
+
+### 5. 获取当前登录用户的车辆列表
+
+- **URL**：`GET /api/v1/vehicles`
+- **鉴权**：需要用户 JWT（`UserAuthMiddleware`，从 Token 中解析 `user_id`）
+- **处理函数**：`controller.GetUserVehicles`
+- **请求参数**：无（从 Token 中获取用户 ID）
+- **请求头**：
+  - `Authorization: Bearer {user_jwt_token}`
+- **响应示例**：
+  ```json
+  {
+    "total": 2,
+    "data": [
+      {
+        "vehicle_id": 1,
+        "license_plate": "粤A12345",
+        "brand": "特斯拉",
+        "model": "Model 3",
+        "color": "白色"
+      },
+      {
+        "vehicle_id": 2,
+        "license_plate": "粤B54321",
+        "brand": "比亚迪",
+        "model": "汉",
+        "color": "黑色"
+      }
+    ]
+  }
+  ```
+- **说明**：
+  - 返回当前登录用户在 `vehicle` 表中的所有车辆。
+  - 字段命名与登录接口中返回的 `user.vehicles` 保持一致（`vehicle_id` / `license_plate` 等），方便前端统一处理。
+
+### 6. 为当前用户添加车辆
+
+- **URL**：`POST /api/v1/vehicles`
+- **鉴权**：需要用户 JWT
+- **处理函数**：`controller.AddUserVehicle`
+- **请求体**：
+  ```json
+  {
+    "license_plate": "string, 必填，车牌号，需唯一",
+    "brand": "string, 可选，品牌",
+    "model": "string, 可选，车型",
+    "color": "string, 可选，颜色"
+  }
+  ```
+- **响应示例**：
+  ```json
+  {
+    "message": "车辆添加成功",
+    "vehicle": {
+      "vehicle_id": 3,
+      "license_plate": "粤C00001",
+      "brand": "丰田",
+      "model": "卡罗拉",
+      "color": "银色"
+    }
+  }
+  ```
+- **说明**：
+  - `user_id` 从 Token 中获取，无需前端传递。
+  - 若车牌号在 `vehicle` 表中已存在，将因唯一约束导致插入失败，后端会返回 `"添加车辆失败: ..."` 错误信息。
+
+### 7. 删除当前用户的一辆车辆
+
+- **URL**：`DELETE /api/v1/vehicles/:id`
+- **鉴权**：需要用户 JWT
+- **处理函数**：`controller.DeleteUserVehicle`
+- **路径参数**：
+  - `id`：车辆 ID（`vehicle_id`）
+- **响应示例**：
+  ```json
+  {
+    "message": "车辆删除成功",
+    "vehicle_id": 3
+  }
+  ```
+- **错误情况**：
+  - `401 未授权`：未携带或携带无效 Token。
+  - `404 未找到`：该 `vehicle_id` 不存在，或不属于当前用户。
+  - `500 内部错误`：数据库删除失败等。
+- **说明**：
+  - 使用外键级联（`OnDelete:CASCADE`）自动处理与该车辆相关的预约、停车记录、违规记录等数据。
+  - 建议前端在删除前提醒用户该操作可能会清理相关历史记录。
 
 ---
 
@@ -507,9 +682,17 @@
     "vehicle_id": 10,
     "lot_id": 2,
     "start_time": "2025-01-02T10:00:00Z",
-    "end_time": "2025-01-02T12:00:00Z"
+    "end_time": "2025-01-02T12:00:00Z",
+    "space_type": "普通"
   }
   ```
+- **请求参数说明**：
+  - `user_id`：用户ID（必填）
+  - `vehicle_id`：车辆ID（必填）
+  - `lot_id`：停车场ID（必填）
+  - `start_time`：预订开始时间（必填，RFC3339格式）
+  - `end_time`：预订结束时间（必填，RFC3339格式）
+  - `space_type`：车位类型（可选，默认为"普通"），可选值：普通、充电桩等
 - **响应**：
   ```json
   {
@@ -554,6 +737,8 @@
     ]
   }
   ```
+- **说明**：
+  - **刷新功能**：前端可通过重新调用此接口实现预订信息刷新，获取最新的预订列表。
 
 ### 4. 获取预订详情
 
@@ -569,6 +754,36 @@
     "data": { "order_id": 100, "...": "ReservationOrder 字段" }
   }
   ```
+
+### 5. 检查并更新超时预订
+
+- **URL**：`POST /api/v4/booking/check-expired`
+- **处理函数**：`booking.Handler.CheckAndUpdateExpiredBookings`
+- **鉴权**：不需要（建议前端定期调用或后端定时任务调用）
+- **请求体**：无
+- **响应**：
+  ```json
+  {
+    "code": 0,
+    "message": "success",
+    "data": {
+      "updated_count": 5,
+      "message": "已更新 5 条超时预订记录"
+    }
+  }
+  ```
+- **业务说明**：
+  - 检查所有已超过结束时间（`end_time < 当前时间`）且状态为"已预订"（status=1）或"使用中"（status=2）的预订记录
+  - 将这些预订的状态更新为"已取消"（status=0）
+  - 设置 `actual_end_time` 为当前时间
+  - 释放关联的车位（将车位的 `is_reserved` 设为 0）
+  - 返回更新的记录数量
+- **使用场景**：
+  - 前端可以在用户查看预订列表时调用此接口，确保显示最新的预订状态
+  - 后端可以设置定时任务定期调用此接口，自动清理超时的预订记录
+- **说明**：
+  - 此接口会批量处理所有超时的预订记录，建议不要频繁调用（如每分钟调用一次）
+  - 建议在用户主动刷新预订列表时调用，或由后端定时任务（如每小时）调用
 
 ---
 
@@ -600,6 +815,7 @@
 - **路径参数**：
   - `user_id`：用户 ID（必填）
 - **响应**（成功，HTTP 200）：
+  - **有记录时**：返回停车记录数组
   ```json
   [
     {
@@ -641,14 +857,14 @@
     }
   ]
   ```
+  - **无记录时**：返回空数组 `[]`
 - **错误响应**：
   - HTTP 400：用户ID为空或无效
-  - HTTP 404：未找到在场停车记录
   - HTTP 500：查询停车记录失败
 - **说明**：
   - 返回指定用户所有状态为"在场"（record_status=1）的停车记录
   - 记录包含完整的车辆、车位、停车场信息
-  - 如果用户没有在场停车记录，返回404错误
+  - 如果用户没有在场停车记录，返回HTTP 200和空数组`[]`（这是RESTful API的最佳实践，404应该用于资源不存在，而不是查询结果为空）
 
 ### 4. 获取停车场车位占用情况（实时概览）
 
@@ -700,9 +916,10 @@
   ```
 - **业务说明**：
   - 根据车牌号查找车辆和用户。
-  - 若当前时间段有有效预约，优先使用该预约车位并将预约状态置为“使用中”。
+  - 若当前时间段有有效预约（状态为已预订，且在预订时间段内，允许提前30分钟入场），优先使用该预约车位并将预约状态置为“使用中”（status=2）。
   - 若无预约则分配一个空闲车位。
   - 创建 `ParkingRecord` 并将车位状态置为占用。
+  - **预订状态更新**：如果车辆入场时使用了预订车位，预订状态会自动更新为"使用中"（status=2），前端可通过刷新预订列表获取最新状态。
 
 ### 7. 车辆出场
 
@@ -748,7 +965,8 @@
   4. **释放车位**：
      - 将车位状态更新为未占用（is_occupied=0）
   5. **处理预约**：
-     - 如果该停车记录关联了预约，将预约状态更新为"已完成"（status=3）
+     - 如果该停车记录关联了预约（通过车辆ID和入场时间匹配），将预约状态更新为"已完成"（status=3），并设置 `actual_end_time` 为当前时间
+     - **预订状态更新**：车辆离场后，关联的预订状态会自动更新为"已完成"（status=3），前端可通过刷新预订列表获取最新状态
   6. **生成支付**：
      - 调用统一支付服务创建支付单（类型为"parking"）
      - 生成模拟支付链接返回前端
@@ -786,7 +1004,7 @@
 - **路径参数**：
   - `user_id`：用户 ID
 - **查询参数**：
-  - `status`：可选，`0`=未处理，`1`=已处理，不传则返回全部
+  - 无（已废弃status参数，默认返回所有违规记录）
 - **响应**：
   ```json
   {
@@ -804,6 +1022,8 @@
     ]
   }
   ```
+- **说明**：
+  - **刷新功能**：前端可通过重新调用此接口实现违规记录刷新，获取最新的违规记录列表（包括支付状态更新后的记录）。
 
 > 备注：`controller.GetUserViolations` 提供了一个类似的接口，但当前未在路由中注册，QT 前端不必使用。
 
@@ -886,7 +1106,7 @@
   - 金额：优先使用传入的 `amount`，否则使用违规记录的 `fine_amount`
   - 如果金额为0，返回错误
   - 使用原生SQL插入支付记录（临时禁用外键检查）
-  - TransactionNo使用临时唯一值
+  - TransactionNo使用临时唯一值：`PENDING_VIO_{violation_id}_{timestamp}`（与普通支付区分）
   
 - **错误信息**：
   - `"参数错误: ..."`：请求参数验证失败
@@ -935,11 +1155,12 @@
      - 设置 payment_status=1（已支付）
      - 更新 transaction_no、method、amount
      - 设置 pay_time 为当前时间
-  5. **更新业务记录**（按顺序查找）：
-     - **优先查找 ParkingRecord**：如果 OrderID 对应停车记录，更新停车记录的 payment_status=1 和 fee_paid
-     - **其次查找 ReservationOrder**：如果 OrderID 对应预订订单，调用 `bookingSvc.PayBooking` 更新订单状态
-     - **最后查找 ViolationRecord**：如果 OrderID 对应违规记录，更新违规记录的 status=1（已处理）
-  6. **返回结果**：如果未找到任何关联业务记录，返回警告但支付记录已更新
+  5. **更新业务记录**（根据TransactionNo前缀判断支付类型）：
+     - **违规支付**（TransactionNo前缀为`PENDING_VIO_`）：优先查找ViolationRecord，更新违规记录的 status=1（已处理）
+     - **预订支付**：查找ReservationOrder，调用 `bookingSvc.PayBooking` 更新订单状态
+     - **停车支付**：查找ParkingRecord，更新停车记录的 payment_status=1 和 fee_paid
+     - **兜底查找**：如果通过前缀无法判断，按顺序查找：ReservationOrder → ParkingRecord → ViolationRecord
+  6. **返回结果**：即使未找到任何关联业务记录，只要支付记录已更新为已支付状态，仍然返回成功（支付已完成，不应阻止支付流程）
 - **错误信息**：
   - `"参数错误: ..."`：请求参数验证失败
   - `"支付记录不存在"`：payment_id 对应的支付记录不存在
@@ -948,7 +1169,7 @@
   - `"更新支付记录失败"`：支付记录更新失败
   - `"更新停车记录失败"`：停车记录更新失败
   - `"支付记录已更新，但订单更新失败: ..."`：支付记录已更新，但预订订单更新失败
-  - `"支付已记录，但未找到关联的业务记录（reservation/parking/violation）"`：未找到对应的业务记录
+  - 注意：如果未找到关联的业务记录，支付记录仍然会更新为已支付状态，接口返回成功（支付已完成）
 - **说明**：
   - 一般由模拟支付页面调用，实际生产环境由第三方支付平台回调
   - 内部会更新 `payment_record` 状态以及关联订单的支付状态

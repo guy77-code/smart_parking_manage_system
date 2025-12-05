@@ -7,7 +7,7 @@
 				{
 					"build" : ".",
 					"hasInstallRule" : true,
-					"jsonFile" : "directory-.-Debug-62b781444b4c82828341.json",
+					"jsonFile" : "directory-.-Debug-95662fcd20ea28913d04.json",
 					"minimumCMakeVersion" : 
 					{
 						"string" : "3.16"
@@ -44,7 +44,7 @@
 				{
 					"directoryIndex" : 0,
 					"id" : "SmartParkingUI::@6890427a1f51a3e7e1df",
-					"jsonFile" : "target-SmartParkingUI-Debug-ce74932297652cb2554e.json",
+					"jsonFile" : "target-SmartParkingUI-Debug-18fc674793e8c19fe0bf.json",
 					"name" : "SmartParkingUI",
 					"projectIndex" : 0
 				},

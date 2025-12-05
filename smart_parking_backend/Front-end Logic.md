@@ -109,10 +109,11 @@
   7. 更新页面显示为"当前暂无车辆在使用停车场"（重新调用查询接口）
 
 ### 2. 预订信息显示
-**功能描述**：显示用户的预订信息，提供预订按钮。
+**功能描述**：显示用户的预订信息，提供预订按钮和刷新按钮。
 
 **接口调用**：
 - 获取用户预订列表：`GET /api/v4/booking/user?user_id={user_id}`
+  - 查询参数：`user_id`（必填，用户ID）
   - 响应：`{ "code": 0, "message": "success", "data": [ReservationOrder...] }`
 
 **逻辑流程**：
@@ -120,26 +121,62 @@
   - 调用接口获取用户预订列表
   - 如果有预订：显示预订信息（停车场名称、车位编号、预订时间段、状态等）
   - 如果没有预订：显示"暂无预订信息"，显示"预订"按钮
-  - 如果预订已超时（`status=1` 且 `start_time` 已过30分钟）：调用 `POST /api/violations/check`（`check_type=1`）生成违规记录，弹出违规提示
+  - **状态自动更新**：
+    - 当车辆在预订时间段内入场时，预订状态会自动更新为"使用中"（status=2），前端需要刷新预订列表才能看到最新状态
+    - 当车辆离场时，如果该停车记录关联了预订，预订状态会自动更新为"已完成"（status=3），前端需要刷新预订列表才能看到最新状态
+  - **超时预订处理**：
+    - 在显示预订列表前，可选择性调用 `POST /api/v4/booking/check-expired` 接口检查和更新超时的预订记录
+    - 如果预订已超时（`end_time < 当前时间` 且 `status` 为1或2），该接口会将状态更新为"已取消"（status=0）
+    - 如果预订已超时（`status=1` 且 `start_time` 已过30分钟）：调用 `POST /api/violations/check`（`check_type=1`）生成违规记录，弹出违规提示
+
+- **刷新操作**：
+  - 用户点击"刷新"按钮
+  - 可选：先调用 `POST /api/v4/booking/check-expired` 检查并更新超时预订（确保状态最新）
+  - 重新调用 `GET /api/v4/booking/user?user_id={user_id}` 接口
+  - 更新页面显示的预订信息列表
+  - 显示"刷新成功"提示（可选）
 
 - **预订操作**：
   - 用户点击"预订"按钮，跳转到预订界面（见"预订界面"）
 
 ### 3. 订单信息显示
-**功能描述**：显示待支付订单和历史停车/支付信息。
+**功能描述**：显示待支付订单和历史停车/支付信息，提供刷新按钮。根据订单类型显示详细信息。
 
 **接口调用**：
 - 获取用户支付记录：`GET /api/v1/getpaymentinfo?page=1&page_size=10`
-  - 查询参数：`page`（页码）、`page_size`（每页数量）
-  - 响应：`{ "total": 总数, "page": 页码, "page_size": 每页数量, "records": [PaymentRecord...] }`
-  - 说明：返回的记录包含关联的订单信息（`order` 字段）
+  - 鉴权：需要用户 JWT（需在上游中间件把 `user_id` 放入 Gin Context）
+  - 查询参数：`page`（页码，默认 `1`）、`page_size`（每页数量，默认 `10`）
+  - 响应：`{ "total": 总数, "page": 页码, "page_size": 每页数量, "records": [PaymentRecordWithDetails...] }`
+  - 说明：返回的记录包含 `order_type`（订单类型）和 `order_details`（订单详细信息）字段
 
 **逻辑流程**：
-- **待支付订单显示**：
+- **订单列表显示**：
   - 从支付记录中筛选 `payment_status=0`（待支付）的记录
-  - 显示订单号、金额、支付方式、创建时间等信息
+  - 根据 `order_type` 字段判断订单类型，显示对应的详细信息：
+    - **停车订单（parking）**：
+      - 显示订单类型："停车订单"
+      - 显示停车时间：`order_details.entry_time` 至 `order_details.exit_time`（如果有）
+      - 显示停车场地点：`order_details.lot.name`（`order_details.lot.address`）
+      - 显示停车车辆信息：`order_details.vehicle.license_plate`、`order_details.vehicle.brand`、`order_details.vehicle.model`、`order_details.vehicle.color`
+    - **违规订单（violation）**：
+      - 显示订单类型："违规订单"
+      - 显示违规时间：`order_details.violation_time`
+      - 显示违规事件描述：`order_details.description`
+      - 显示违规类型：`order_details.violation_type`
+      - 显示罚款金额：`order_details.fine_amount`
+    - **预订订单（reservation）**：
+      - 显示订单类型："预订订单"
+      - 显示预订编号：`order_details.reservation_cod`
+      - 显示预订时间段：`order_details.start_time` 至 `order_details.end_time`
+  - 显示订单号、金额、支付方式、创建时间等基本信息
   - 如果没有待支付订单：显示"暂无待支付订单"
   - 点击待支付订单：跳转到支付页面
+
+- **刷新操作**：
+  - 用户点击"刷新"按钮
+  - 重新调用 `GET /api/v1/getpaymentinfo?page={当前页码}&page_size={当前每页数量}` 接口
+  - 更新页面显示的支付记录列表（包括待支付订单和历史记录）
+  - 显示"刷新成功"提示（可选）
 
 - **查看历史信息**：
   - 用户点击"查看支付信息和历史停车信息"按钮
@@ -183,12 +220,12 @@
   7. 支付完成后，返回"已支付成功"提示，更新待支付订单列表（重新调用查询接口）
 
 ### 4. 违规记录查看
-**功能描述**：用户查看自己的违规记录。
+**功能描述**：用户查看自己的违规记录，提供刷新按钮。
 
 **接口调用**：
-- 获取用户违规记录：`GET /api/violations/checkmyself/:user_id?status=0`
-  - 路径参数：`user_id`（必填）
-  - 查询参数：`status`（可选，0=未处理，1=已处理，不传则返回全部）
+- 获取用户违规记录：`GET /api/violations/checkmyself/:user_id`
+  - 路径参数：`user_id`（必填，用户ID）
+  - 查询参数：无（已废弃status参数，默认返回所有违规记录）
   - 响应：`{ "total": 数量, "data": [ViolationRecord...] }`
     - 每条记录包含：`violation_id`、`violation_type`、`violation_time`、`fine_amount`、`status`、`record`、`vehicle`、`user` 等字段
 
@@ -197,6 +234,11 @@
 - 跳转到违规记录页面
 - 调用接口获取违规记录列表
 - 显示违规类型（`violation_type`）、违规时间（`violation_time`）、罚款金额（`fine_amount`）、处理状态（`status`：0=未处理，1=已处理）等信息
+- **刷新操作**：
+  - 用户点击"刷新"按钮
+  - 重新调用 `GET /api/violations/checkmyself/:user_id` 接口
+  - 更新页面显示的违规记录列表
+  - 显示"刷新成功"提示（可选）
 - 如果违规未处理（`status=0`），可点击"支付罚款"按钮
   - 调用 `POST /api/violations/:violation_id/pay`
   - 接口返回：
@@ -235,11 +277,16 @@
 8. 用户填写预订开始时间和结束时间（格式：`RFC3339` 或 `"2006-01-02 15:04:05"`）
 9. 用户点击"预订"按钮
 10. 调用 `POST /api/v4/booking/create`
-    - 请求体：`{ "user_id": 用户ID, "vehicle_id": 车辆ID, "lot_id": 停车场ID, "start_time": "开始时间", "end_time": "结束时间" }`
+    - 请求体：`{ "user_id": 用户ID, "vehicle_id": 车辆ID, "lot_id": 停车场ID, "start_time": "开始时间", "end_time": "结束时间", "space_type": "普通" }`
+    - 说明：`space_type`为可选参数，默认为"普通"，可选值包括"普通"、"充电桩"等
 11. 接口返回预订订单信息（`order_id`、`reservation_cod` 等）
 12. 显示"预订成功"提示
 13. 用户点击"关闭"按钮，返回用户界面
 14. 用户界面的预订信息自动更新（重新调用 `GET /api/v4/booking/user`）
+15. **预订状态自动更新说明**：
+    - 当用户在预订时间段内（允许提前30分钟）通过车辆入场接口（`POST /api/parking/entry`）进入停车场时，预订状态会自动更新为"使用中"（status=2）
+    - 当车辆离场时（`POST /api/parking/exit`），如果该停车记录关联了预订，预订状态会自动更新为"已完成"（status=3）
+    - 前端需要在适当的时候刷新预订列表以获取最新状态（如从停车页面返回时、页面显示时等）
 
 ---
 

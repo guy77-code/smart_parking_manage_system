@@ -3,6 +3,7 @@ package booking
 import (
 	"errors"
 	"fmt"
+	"smart_parking_backend/internal/inits"
 	"smart_parking_backend/internal/model"
 	"time"
 )
@@ -20,8 +21,8 @@ func NewService(repo *Repository) *Service {
 // ==================== 预订流程 ====================
 // CreateBooking 用户预订车位
 // 流程：查找可用车位 → 创建预订订单 → 标记车位为已预订
-func (s *Service) CreateBooking(userID, vehicleID, lotID uint, start, end time.Time) (*model.ReservationOrder, error) {
-	space, err := s.repo.FindAvailableSlot(lotID)
+func (s *Service) CreateBooking(userID, vehicleID, lotID uint, start, end time.Time, spaceType string) (*model.ReservationOrder, error) {
+	space, err := s.repo.FindAvailableSlot(lotID, spaceType)
 	if err != nil {
 		return nil, errors.New("当前停车场无可用车位")
 	}
@@ -172,4 +173,45 @@ func (s *Service) GetUserBookings(userID uint) ([]model.ReservationOrder, error)
 
 func (s *Service) GetBookingDetail(orderID uint) (*model.ReservationOrder, error) {
 	return s.repo.GetBookingByID(orderID)
+}
+
+// ==================== 检查和更新超时预订 ====================
+// CheckAndUpdateExpiredBookings 检查并更新超时的预订记录
+// 将已超过结束时间且未完成的预订状态更新为已取消
+func (s *Service) CheckAndUpdateExpiredBookings() (int, error) {
+	now := time.Now()
+	var expiredBookings []model.ReservationOrder
+
+	// 查找所有已超过结束时间且状态为已预订(1)或使用中(2)的预订
+	err := inits.DB.
+		Where("end_time < ?", now).
+		Where("status IN (?)", []int8{1, 2}). // 1-已预订, 2-使用中
+		Where("actual_end_time IS NULL").     // 未实际结束
+		Find(&expiredBookings).Error
+
+	if err != nil {
+		return 0, err
+	}
+
+	count := 0
+	for _, booking := range expiredBookings {
+		// 更新预订状态为已取消
+		actualEndTime := now
+		booking.Status = 0 // 0-已取消
+		booking.ActualEndTime = &actualEndTime
+
+		if err := s.repo.UpdateBooking(&booking); err != nil {
+			continue // 如果更新失败，跳过这条记录
+		}
+
+		// 释放车位
+		if err := s.repo.MarkSlotAsBooked(booking.SpaceID, false); err != nil {
+			// 记录错误但不影响主流程
+			fmt.Printf("释放车位失败: space_id=%d, error=%v\n", booking.SpaceID, err)
+		}
+
+		count++
+	}
+
+	return count, nil
 }

@@ -30,6 +30,12 @@ public:
     Q_INVOKABLE void login(const QString &phone, const QString &password = "", const QString &code = "");
     Q_INVOKABLE void adminLogin(const QString &phone, const QString &password);
     Q_INVOKABLE void getUserPaymentRecords(int page = 1, int pageSize = 10);
+    Q_INVOKABLE void getUserVehicles();
+    Q_INVOKABLE void addUserVehicle(const QString &licensePlate,
+                                    const QString &brand,
+                                    const QString &model,
+                                    const QString &color);
+    Q_INVOKABLE void deleteUserVehicle(int vehicleId);
 
     // Parking APIs
     Q_INVOKABLE void getParkingLots();
@@ -56,10 +62,11 @@ public:
     Q_INVOKABLE void deleteParkingSpace(int spaceId);
 
     // Booking APIs
-    Q_INVOKABLE void createBooking(int userId, int vehicleId, int lotId, const QString &startTime, const QString &endTime);
+    Q_INVOKABLE void createBooking(int userId, int vehicleId, int lotId, const QString &startTime, const QString &endTime, const QString &spaceType = "普通");
     Q_INVOKABLE void cancelBooking(int orderId);
     Q_INVOKABLE void getUserBookings(int userId);
     Q_INVOKABLE void getBookingDetail(int orderId);
+    Q_INVOKABLE void checkAndUpdateExpiredBookings();
 
     // Violation APIs
     Q_INVOKABLE void getUserViolations(int userId, int status = -1);
@@ -85,6 +92,7 @@ signals:
     void parkingLotsReceived(const QJsonArray &lots);
     void activeParkingRecordsReceived(const QJsonArray &records);
     void paymentRecordsReceived(const QJsonObject &response);
+    void userVehiclesReceived(const QJsonArray &vehicles);
     void bookingCreated(const QJsonObject &booking);
     void violationsReceived(const QJsonObject &response);
     void paymentCreated(const QJsonObject &payment);

@@ -93,26 +93,44 @@ Page {
             }
         }
 
-        // Start time
-        RowLayout {
+        // Space type selection
+        ColumnLayout {
             Layout.fillWidth: true
-            Text { text: "开始时间:" }
-            TextField {
-                id: startTimeField
+            spacing: 4
+
+            Text {
+                text: "选择车位类型"
+                font.pixelSize: 14
+            }
+
+            ComboBox {
+                id: spaceTypeComboBox
                 Layout.fillWidth: true
-                placeholderText: "2025-01-02T10:00:00Z"
+                model: ["普通", "充电桩"]
+                currentIndex: 0
             }
         }
 
-        // End time
+        // Start time (date/time editors via SpinBox)
+        RowLayout {
+            Layout.fillWidth: true
+            Text { text: "开始时间:" }
+            SpinBox { id: startYear; from: 2020; to: 2100; value: new Date().getFullYear() }
+            SpinBox { id: startMonth; from: 1; to: 12; value: new Date().getMonth() + 1 }
+            SpinBox { id: startDay; from: 1; to: 31; value: new Date().getDate() }
+            SpinBox { id: startHour; from: 0; to: 23; value: 8 }
+            SpinBox { id: startMinute; from: 0; to: 59; value: 0 }
+        }
+
+        // End time (date/time editors via SpinBox)
         RowLayout {
             Layout.fillWidth: true
             Text { text: "结束时间:" }
-            TextField {
-                id: endTimeField
-                Layout.fillWidth: true
-                placeholderText: "2025-01-02T12:00:00Z"
-            }
+            SpinBox { id: endYear; from: 2020; to: 2100; value: new Date().getFullYear() }
+            SpinBox { id: endMonth; from: 1; to: 12; value: new Date().getMonth() + 1 }
+            SpinBox { id: endDay; from: 1; to: 31; value: new Date().getDate() }
+            SpinBox { id: endHour; from: 0; to: 23; value: 10 }
+            SpinBox { id: endMinute; from: 0; to: 59; value: 0 }
         }
 
         // Space visualization button
@@ -154,9 +172,16 @@ Page {
         Button {
             Layout.fillWidth: true
             text: "提交预订"
-            enabled: selectedLotId > 0 && selectedVehicleId > 0 && startTimeField.text.length > 0 && endTimeField.text.length > 0
+            enabled: selectedLotId > 0 && selectedVehicleId > 0
             onClicked: {
-                apiClient.createBooking(userId, selectedVehicleId, selectedLotId, startTimeField.text, endTimeField.text)
+                var spaceType = spaceTypeComboBox.currentText || "普通"
+                apiClient.createBooking(
+                            userId,
+                            selectedVehicleId,
+                            selectedLotId,
+                            formatDateTime(startYear, startMonth, startDay, startHour, startMinute),
+                            formatDateTime(endYear, endMonth, endDay, endHour, endMinute),
+                            spaceType)
             }
         }
 
@@ -185,89 +210,113 @@ Page {
 
     Component.onCompleted: {
         apiClient.getParkingLots()
+        // 优先使用后端接口获取车辆列表，authManager.userInfo 作为兜底
+        apiClient.getUserVehicles()
         loadUserVehicles()
+    }
+
+    onVisibleChanged: {
+        if (visible) {
+            loadUserVehicles()
+        }
+    }
+
+    function cloneObject(obj) {
+        if (!obj)
+            return null
+        try {
+            return JSON.parse(JSON.stringify(obj))
+        } catch (err) {
+            console.log("cloneObject failed:", err)
+            return obj
+        }
+    }
+
+    function sanitizeVehicle(veh) {
+        if (!veh || typeof veh !== "object")
+            return null
+        var vehicleId = veh.vehicle_id !== undefined ? veh.vehicle_id :
+                        (veh.vehicleId !== undefined ? veh.vehicleId :
+                        (veh.VehicleID !== undefined ? veh.VehicleID : 0))
+        var licensePlate = veh.license_plate !== undefined ? veh.license_plate :
+                           (veh.licensePlate !== undefined ? veh.licensePlate :
+                           (veh.LicensePlate !== undefined ? veh.LicensePlate : ""))
+        if (vehicleId <= 0 || licensePlate.length === 0)
+            return null
+        return {
+            vehicleId: vehicleId,
+            vehicle_id: vehicleId,
+            licensePlate: licensePlate,
+            license_plate: licensePlate
+        }
+    }
+
+    function sanitizeLot(lot) {
+        if (!lot || typeof lot !== "object")
+            return null
+        var lotId = lot.lot_id !== undefined ? lot.lot_id :
+                    (lot.lotId !== undefined ? lot.lotId :
+                    (lot.LotID !== undefined ? lot.LotID : 0))
+        return {
+            lotId: lotId,
+            lot_id: lotId,
+            name: lot.name || lot.Name || "",
+            address: lot.address || lot.Address || "",
+            hourlyRate: lot.hourly_rate !== undefined ? lot.hourly_rate :
+                        (lot.hourlyRate !== undefined ? lot.hourlyRate : 0),
+            totalLevels: lot.total_levels !== undefined ? lot.total_levels :
+                         (lot.totalLevels !== undefined ? lot.totalLevels : 1),
+            totalSpaces: lot.total_spaces !== undefined ? lot.total_spaces :
+                         (lot.totalSpaces !== undefined ? lot.totalSpaces : 0)
+        }
+    }
+
+    // 将年月日时分 SpinBox 转换为 RFC3339 字符串
+    function formatDateTime(y, m, d, h, min) {
+        function pad2(n) { return n < 10 ? "0" + n : "" + n }
+        var year = y.value
+        var month = pad2(m.value)
+        var day = pad2(d.value)
+        var hour = pad2(h.value)
+        var minute = pad2(min.value)
+        var second = "00"
+        return year + "-" + month + "-" + day + "T" + hour + ":" + minute + ":" + second + "Z"
     }
 
     function loadUserVehicles() {
         vehicleModel.clear()
-        var info = authManager.userInfo
-        console.log("Loading vehicles from userInfo:", JSON.stringify(info))
-        
+        var info = cloneObject(authManager.userInfo)
+        if (info)
+            console.log("Loading vehicles from userInfo:", JSON.stringify(info))
+
+        var vehicles = null
         if (info) {
-            var vehicles = null
-            
-            // 尝试多种可能的字段名和格式
             if (info.vehicles !== undefined) {
                 vehicles = info.vehicles
             } else if (info.Vehicles !== undefined) {
                 vehicles = info.Vehicles
             }
-            
-            // 处理数组格式
-            if (vehicles && Array.isArray(vehicles)) {
-                console.log("Found vehicles array with", vehicles.length, "items")
-                for (var i = 0; i < vehicles.length; i++) {
-                    var veh = vehicles[i]
-                    if (veh) {
-                        // 尝试多种字段名格式
-                        var vehicleId = veh.vehicle_id !== undefined ? veh.vehicle_id : 
-                                      (veh.vehicleId !== undefined ? veh.vehicleId : 
-                                      (veh.VehicleID !== undefined ? veh.VehicleID : 0))
-                        var licensePlate = veh.license_plate !== undefined ? veh.license_plate : 
-                                          (veh.licensePlate !== undefined ? veh.licensePlate : 
-                                          (veh.LicensePlate !== undefined ? veh.LicensePlate : ""))
-                        
-                        console.log("Processing vehicle:", vehicleId, licensePlate)
-                        
-                        if (vehicleId > 0 && licensePlate && licensePlate.length > 0) {
-                            vehicleModel.append({
-                                vehicleId: vehicleId,
-                                vehicle_id: vehicleId,
-                                licensePlate: licensePlate,
-                                license_plate: licensePlate
-                            })
-                        }
-                    }
-                }
-            } else if (vehicles && typeof vehicles === 'object') {
-                // 如果是对象，尝试转换为数组
-                console.log("Vehicles is object, converting to array")
-                var vehicleArray = []
-                for (var key in vehicles) {
-                    if (vehicles.hasOwnProperty(key)) {
-                        vehicleArray.push(vehicles[key])
-                    }
-                }
-                if (vehicleArray.length > 0) {
-                    vehicles = vehicleArray
-                    // 重新处理
-                    for (var j = 0; j < vehicles.length; j++) {
-                        var veh2 = vehicles[j]
-                        if (veh2) {
-                            var vehicleId2 = veh2.vehicle_id !== undefined ? veh2.vehicle_id : 
-                                           (veh2.vehicleId !== undefined ? veh2.vehicleId : 
-                                           (veh2.VehicleID !== undefined ? veh2.VehicleID : 0))
-                            var licensePlate2 = veh2.license_plate !== undefined ? veh2.license_plate : 
-                                              (veh2.licensePlate !== undefined ? veh2.licensePlate : 
-                                              (veh2.LicensePlate !== undefined ? veh2.LicensePlate : ""))
-                            
-                            if (vehicleId2 > 0 && licensePlate2 && licensePlate2.length > 0) {
-                                vehicleModel.append({
-                                    vehicleId: vehicleId2,
-                                    vehicle_id: vehicleId2,
-                                    licensePlate: licensePlate2,
-                                    license_plate: licensePlate2
-                                })
-                            }
-                        }
-                    }
+        }
+
+        if (vehicles && Array.isArray(vehicles)) {
+            for (var i = 0; i < vehicles.length; i++) {
+                var clean = sanitizeVehicle(vehicles[i])
+                if (clean)
+                    vehicleModel.append(clean)
+            }
+        } else if (vehicles && typeof vehicles === "object") {
+            for (var key in vehicles) {
+                if (vehicles.hasOwnProperty(key)) {
+                    var cleanObj = sanitizeVehicle(vehicles[key])
+                    if (cleanObj)
+                        vehicleModel.append(cleanObj)
                 }
             }
         }
-        
+
         console.log("Loaded vehicles count:", vehicleModel.count)
         if (vehicleModel.count === 0) {
-            console.log("Warning: No vehicles found in userInfo:", JSON.stringify(info))
+            console.log("Warning: No vehicles found for user:", JSON.stringify(info))
         }
     }
 
@@ -284,7 +333,10 @@ Page {
         function onParkingLotsReceived(lots) {
             parkingLotModel.clear()
             for (var i = 0; i < lots.length; i++) {
-                parkingLotModel.append(lots[i])
+                var clean = sanitizeLot(lots[i])
+                if (clean) {
+                    parkingLotModel.append(clean)
+                }
             }
 
             // 默认选中第一个停车场，便于后续直接查看可视化
@@ -293,6 +345,22 @@ Page {
             } else {
                 selectedLotId = 0
             }
+        }
+
+        // 来自 /api/v1/vehicles 的车辆列表
+        function onUserVehiclesReceived(vehicles) {
+            if (!vehicles || !Array.isArray(vehicles)) {
+                return
+            }
+            vehicleModel.clear()
+            console.log("Received vehicles from /api/v1/vehicles:", JSON.stringify(vehicles))
+            for (var i = 0; i < vehicles.length; i++) {
+                var clean = sanitizeVehicle(vehicles[i])
+                if (clean) {
+                    vehicleModel.append(clean)
+                }
+            }
+            console.log("VehicleModel count after API:", vehicleModel.count)
         }
 
         function onRequestFinished(response) {

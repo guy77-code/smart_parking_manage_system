@@ -10,7 +10,7 @@ set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
 
 # Find Qt6 components
-find_package(Qt6 REQUIRED COMPONENTS Core Network Quick QuickControls2)
+find_package(Qt6 REQUIRED COMPONENTS Core Network Quick QuickControls2 Charts)
 
 # Set QML import path
 set(CMAKE_PREFIX_PATH ${CMAKE_PREFIX_PATH} "${CMAKE_CURRENT_SOURCE_DIR}")
@@ -77,6 +77,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     Qt6::Network
     Qt6::Quick
     Qt6::QuickControls2
+    Qt6::Charts
 )
 
 # Set QML import path

@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"fmt"
 	"log"
 	"net/http"
 	"smart_parking_backend/internal/inits"
@@ -86,13 +87,15 @@ func checkUnusedReservations() (int, error) {
 	count := 0
 	for _, reservation := range reservations {
 		// 创建违规记录
+		// RecordID设为0（不关联停车记录），将相关信息记录到description中
+		description := fmt.Sprintf("预订车位后未在预订开始时间后30分钟内使用。预订订单ID: %d", reservation.OrderID)
 		violation := model.ViolationRecord{
-			RecordID:      reservation.OrderID, // 使用预约ID作为关联
+			RecordID:      0, // 不关联停车记录
 			UserID:        reservation.UserID,
 			VehicleID:     reservation.VehicleID,
 			ViolationType: "预订未使用",
 			ViolationTime: now,
-			Description:   "预订车位后未在预订开始时间后30分钟内使用",
+			Description:   description,
 			FineAmount:    reservation.Lot.HourlyRate, // 罚款为1小时停车费
 			Status:        0,                          // 0-未处理
 		}
@@ -152,13 +155,15 @@ func checkOvertimeParking() (int, error) {
 	count := 0
 	for _, reservation := range reservations {
 		// 创建违规记录
+		// RecordID设为0（不关联停车记录），将相关信息记录到description中
+		description := fmt.Sprintf("使用车位超出预订结束时间30分钟。预订订单ID: %d", reservation.OrderID)
 		violation := model.ViolationRecord{
-			RecordID:      reservation.OrderID, // 使用预约ID作为关联
+			RecordID:      0, // 不关联停车记录
 			UserID:        reservation.UserID,
 			VehicleID:     reservation.VehicleID,
 			ViolationType: "超时停车",
 			ViolationTime: now,
-			Description:   "使用车位超出预订结束时间30分钟",
+			Description:   description,
 			FineAmount:    reservation.Lot.HourlyRate, // 罚款为1小时停车费
 			Status:        0,                          // 0-未处理
 		}
@@ -220,13 +225,15 @@ func checkUnpaidParkingFees() (int, error) {
 		fineAmount := remainingFee * 2
 
 		// 创建违规记录
+		// RecordID设为0（不关联停车记录），将停车记录ID记录到description中
+		description := fmt.Sprintf("停车费产生一个月后仍未支付。停车记录ID: %d", record.RecordID)
 		violation := model.ViolationRecord{
-			RecordID:      record.RecordID,
+			RecordID:      0, // 不关联停车记录
 			UserID:        record.UserID,
 			VehicleID:     record.VehicleID,
 			ViolationType: "未支付停车费",
 			ViolationTime: now,
-			Description:   "停车费产生一个月后仍未支付",
+			Description:   description,
 			FineAmount:    fineAmount,
 			Status:        0, // 0-未处理
 		}
@@ -263,13 +270,18 @@ func checkUnpaidFines() (int, error) {
 	count := 0
 	for _, violation := range violations {
 		// 创建新的违规记录
+		// RecordID设为0（不关联停车记录），将原违规记录ID记录到description中
+		description := fmt.Sprintf("罚款产生两周后仍未支付。原违规记录ID: %d", violation.ViolationID)
+		if violation.RecordID > 0 {
+			description += fmt.Sprintf("，关联停车记录ID: %d", violation.RecordID)
+		}
 		newViolation := model.ViolationRecord{
-			RecordID:      violation.RecordID,
+			RecordID:      0, // 不关联停车记录
 			UserID:        violation.UserID,
 			VehicleID:     violation.VehicleID,
 			ViolationType: "未支付罚款",
 			ViolationTime: now,
-			Description:   "罚款产生两周后仍未支付",
+			Description:   description,
 			FineAmount:    violation.FineAmount * 2, // 剩余罚款的两倍
 			Status:        0,                        // 0-未处理
 		}
@@ -332,24 +344,16 @@ func GetUserViolationHistory(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "用户ID不能为空"})
 		return
 	}
-	//status=0 → 仅查看未处理违规
-	//status=1 → 仅查看已处理违规
-	//无参数 → 默认显示所有违规记录
-
-	status := c.Query("status") // 可选参数：0 或 1
+	// 默认显示所有违规记录，不再支持status参数过滤
 
 	var violations []model.ViolationRecord
-	query := inits.DB.
+	err := inits.DB.
 		Where("user_id = ?", userID).
 		Preload("Record").
 		Preload("Vehicle").
-		Preload("User")
-
-	if status != "" {
-		query = query.Where("status = ?", status)
-	}
-
-	err := query.Order("violation_time DESC").Find(&violations).Error
+		Preload("User").
+		Order("violation_time DESC").
+		Find(&violations).Error
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "查询违规记录失败"})
 		return
@@ -369,7 +373,11 @@ func PayViolationFine(c *gin.Context) {
 		return
 	}
 
-	vioID, _ := strconv.Atoi(vioIDStr)
+	vioID, err := strconv.Atoi(vioIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的违规记录ID"})
+		return
+	}
 
 	// 检查支付服务是否已初始化
 	if PaymentService == nil {
@@ -377,21 +385,49 @@ func PayViolationFine(c *gin.Context) {
 		return
 	}
 
-	// 调用统一 payment service
+	// 1. 先查询违规记录是否存在，以及金额是否正确
+	var violation model.ViolationRecord
+	if err := inits.DB.First(&violation, vioID).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "违规记录不存在"})
+		return
+	}
+
+	// 2. 检查是否已经处理/支付
+	if violation.Status == 1 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "该违规记录已处理，无需重复支付"})
+		return
+	}
+
+	// 3. 准备支付金额 (确保金额有效)
+	amount := violation.FineAmount
+	if amount <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "罚款金额无效"})
+		return
+	}
+
+	// 4. 调用统一 payment service
+	// 注意：这里显式传递了 amount，防止底层服务因为 nil 而报错或取不到值
+	// 另外，paymentMethod 从前端传参获取可能更好，这里暂时保留 alipay 默认值
+	paymentMethod := c.DefaultQuery("method", "alipay")
+
 	redirectURL, paymentID, err := PaymentService.CreatePayment(
 		uint(vioID),
-		"violation",
-		"alipay",
-		nil, // 从数据库自动获取 fine_amount
+		"violation", // 确保类型字符串正确
+		paymentMethod,
+		&amount, // 传递明确的金额指针
 	)
+
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		log.Printf("创建罚款支付失败: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "创建支付失败: " + err.Error()})
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
+		"code":         0, // 明确返回 code 0 以匹配前端 QML 的成功判断
 		"violation_id": vioID,
 		"payment_id":   paymentID,
 		"payment_url":  redirectURL,
+		"redirect_url": redirectURL, // 增加冗余字段以兼容不同前端取值逻辑
 	})
 }
