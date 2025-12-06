@@ -79,28 +79,29 @@ func (r *Repository) UpdatePayment(p *model.PaymentRecord) error {
 
 // ==================== 车位（ParkingSpace）操作 ====================
 
+// FindAvailableSlot 查找可用车位
+// 严格按照用户要求：在车位可用的基础上，按照用户所选车位类型（普通或充电），按照车位序号由小到大安排
 func (r *Repository) FindAvailableSlot(lotID uint, spaceType string) (*model.ParkingSpace, error) {
 	var space model.ParkingSpace
+	
+	// 构建查询条件：车位可用（未被预订、未被占用、状态正常）
 	query := inits.DB.Where("lot_id = ? AND is_reserved = 0 AND is_occupied = 0 AND status = 1", lotID)
 	
-	// 如果指定了车位类型，优先查找该类型的车位
-	if spaceType != "" && spaceType != "普通" {
-		query = query.Where("space_type = ?", spaceType)
+	// 必须按照用户所选车位类型进行过滤（无论是"普通"还是"充电"）
+	// 如果未指定类型，默认为"普通"
+	if spaceType == "" {
+		spaceType = "普通"
+	}
+	query = query.Where("space_type = ?", spaceType)
+	
+	// 按照车位序号由小到大排序，确保优先分配序号较小的车位
+	err := query.Order("space_number ASC").First(&space).Error
+	
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		// 如果找不到指定类型的可用车位，返回错误（不再回退到其他类型）
+		return nil, errors.New("当前停车场无该类型的可用车位")
 	}
 	
-	err := query.First(&space).Error
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		// 如果指定了类型但找不到，尝试查找普通车位
-		if spaceType != "" && spaceType != "普通" {
-			var normalSpace model.ParkingSpace
-			err2 := inits.DB.Where("lot_id = ? AND is_reserved = 0 AND is_occupied = 0 AND status = 1 AND space_type = ?", lotID, "普通").
-				First(&normalSpace).Error
-			if err2 == nil {
-				return &normalSpace, nil
-			}
-		}
-		return nil, errors.New("no available parking space")
-	}
 	return &space, err
 }
 

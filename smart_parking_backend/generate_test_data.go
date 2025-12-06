@@ -69,15 +69,15 @@ var givenNames = []string{"伟", "芳", "娜", "秀英", "敏", "静", "丽", "�
 // 	}
 // 	passwordHashStr := string(passwordHash)
 
-// 	// 生成50个用户
-// 	fmt.Println("1. 生成50个用户及其车辆...")
-// 	users := make([]model.Users_list, 0, 50)
-// 	allVehicles := make([]model.Vehicle, 0, 100)
+// 	// 生成150个用户（从user51开始，到user200）
+// 	fmt.Println("1. 生成150个用户及其车辆（user51-user200）...")
+// 	users := make([]model.Users_list, 0, 150)
+// 	allVehicles := make([]model.Vehicle, 0, 300)
 
-// 	for i := 1; i <= 50; i++ {
-// 		// 生成用户信息
+// 	for i := 51; i <= 200; i++ {
+// 		// 生成用户信息（从user51开始）
 // 		username := fmt.Sprintf("user%03d", i)
-// 		phone := fmt.Sprintf("138%08d", 10000000+i)
+// 		phone := fmt.Sprintf("138%08d", 10000050+(i-51)) // 从13810000050开始
 // 		email := fmt.Sprintf("user%03d@example.com", i)
 // 		realName := generateRandomName()
 
@@ -123,20 +123,20 @@ var givenNames = []string{"伟", "芳", "娜", "秀英", "敏", "静", "丽", "�
 // 			allVehicles = append(allVehicles, vehicle)
 // 		}
 
-// 		if i%10 == 0 {
-// 			fmt.Printf("  已生成 %d 个用户...\n", i)
+// 		if (i-50)%10 == 0 {
+// 			fmt.Printf("  已生成 %d 个用户...\n", i-50)
 // 		}
 // 	}
 
 // 	fmt.Printf("✅ 成功生成 %d 个用户，%d 辆车\n\n", len(users), len(allVehicles))
 
-// 	// 为每个用户生成2-3条停车记录
+// 	// 为每个用户生成停车记录（每位至少3条）
 // 	fmt.Println("2. 生成停车记录...")
 // 	parkingRecords := make([]model.ParkingRecord, 0)
 
 // 	for i, user := range users {
-// 		// 每个用户2-3条停车记录
-// 		numRecords := 2 + rand.Intn(2) // 2或3
+// 		// 每个用户3-5条停车记录（至少3条）
+// 		numRecords := 3 + rand.Intn(3) // 3, 4, 或 5
 
 // 		// 获取该用户的车辆
 // 		var userVehicles []model.Vehicle
@@ -194,7 +194,7 @@ var givenNames = []string{"伟", "芳", "娜", "秀英", "敏", "静", "丽", "�
 // 				SpaceID:         space.SpaceID,
 // 				LotID:           lot.LotID,
 // 				EntryTime:       entryTime,
-// 				ExitTime:         &exitTime,
+// 				ExitTime:        &exitTime,
 // 				DurationMinutes: durationMinutes,
 // 				FeeCalculated:   feeCalculated,
 // 				FeePaid:         feePaid,
@@ -220,14 +220,14 @@ var givenNames = []string{"伟", "芳", "娜", "秀英", "敏", "静", "丽", "�
 
 // 	fmt.Printf("✅ 成功生成 %d 条停车记录\n\n", len(parkingRecords))
 
-// 	// 为每个用户生成1-2条预订订单记录
+// 	// 为每个用户生成预订订单记录（每位至少2条）
 // 	fmt.Println("3. 生成预订订单记录...")
 // 	reservationOrders := make([]model.ReservationOrder, 0)
 // 	reservationCounter := 0
 
 // 	for i, user := range users {
-// 		// 每个用户1-2条预订订单
-// 		numReservations := 1 + rand.Intn(2) // 1或2
+// 		// 每个用户2-4条预订订单（至少2条）
+// 		numReservations := 2 + rand.Intn(3) // 2, 3, 或 4
 
 // 		// 获取该用户的车辆
 // 		var userVehicles []model.Vehicle
@@ -235,6 +235,12 @@ var givenNames = []string{"伟", "芳", "娜", "秀英", "敏", "静", "丽", "�
 // 			if v.UserID == user.UserID {
 // 				userVehicles = append(userVehicles, v)
 // 			}
+// 		}
+
+// 		// 确保使用Asia/Shanghai时区
+// 		loc, err := time.LoadLocation("Asia/Shanghai")
+// 		if err != nil {
+// 			loc = time.Local
 // 		}
 
 // 		for j := 0; j < numReservations; j++ {
@@ -255,7 +261,7 @@ var givenNames = []string{"伟", "芳", "娜", "秀英", "敏", "静", "丽", "�
 // 			space := availableSpaces[rand.Intn(len(availableSpaces))]
 
 // 			// 生成预订时间（过去30天内）
-// 			bookingTime := time.Now().AddDate(0, 0, -rand.Intn(30))
+// 			bookingTime := time.Now().In(loc).AddDate(0, 0, -rand.Intn(30))
 // 			// 预订开始时间：预订时间后的1-7天
 // 			startTime := bookingTime.AddDate(0, 0, 1+rand.Intn(7))
 // 			// 预订时长：1-4小时
@@ -329,11 +335,11 @@ var givenNames = []string{"伟", "芳", "娜", "秀英", "敏", "静", "丽", "�
 // 				VehicleID:       vehicle.VehicleID,
 // 				SpaceID:         space.SpaceID,
 // 				LotID:           lot.LotID,
-// 				StartTime:       startTime,
-// 				EndTime:         endTime,
+// 				StartTime:       startTime.In(loc), // 确保使用Asia/Shanghai时区
+// 				EndTime:         endTime.In(loc),   // 确保使用Asia/Shanghai时区
 // 				ActualEndTime:   actualEndTime,
 // 				DurationMinutes: durationMinutes,
-// 				BookingTime:     bookingTime,
+// 				BookingTime:     bookingTime.In(loc), // 确保使用Asia/Shanghai时区
 // 				Status:          status,
 // 				TotalFee:        totalFee,
 // 				PaidFee:         paidFee,
@@ -356,7 +362,7 @@ var givenNames = []string{"伟", "芳", "娜", "秀英", "敏", "静", "丽", "�
 
 // 	fmt.Printf("✅ 成功生成 %d 条预订订单记录\n\n", len(reservationOrders))
 
-// 	// 生成支付记录
+// 	// 生成支付记录（为每位用户的预订和停车记录生成）
 // 	fmt.Println("4. 生成支付记录...")
 // 	paymentRecords := make([]model.PaymentRecord, 0)
 
@@ -439,110 +445,148 @@ var givenNames = []string{"伟", "芳", "娜", "秀英", "敏", "静", "丽", "�
 // 	fmt.Printf("✅ 成功生成 %d 条支付记录\n\n", len(paymentRecords))
 
 // 	// 生成违规记录
+// 	// 要求：每三位最多有两位有违规记录，且每位最少有3条违规记录
 // 	fmt.Println("5. 生成违规记录...")
 // 	violationRecords := make([]model.ViolationRecord, 0)
 
-// 	// 为有违规的停车记录生成违规记录
-// 	for _, record := range parkingRecords {
-// 		if record.IsViolation == 1 {
-// 			violationTime := record.EntryTime.Add(time.Duration(rand.Intn(int(record.DurationMinutes))) * time.Minute)
-
-// 			// 随机决定是否已处理
-// 			status := int8(rand.Intn(2))
-// 			processTime := (*time.Time)(nil)
-// 			if status == 1 {
-// 				pt := violationTime.Add(time.Duration(rand.Intn(7*24*3600)) * time.Second) // 7天内处理
-// 				processTime = &pt
-// 			}
-
-// 			// 罚款金额：停车费的0.5-2倍
-// 			fineAmount := record.FeeCalculated * (0.5 + rand.Float64()*1.5)
-
-// 			violation := model.ViolationRecord{
-// 				RecordID:      record.RecordID,
-// 				UserID:        record.UserID,
-// 				VehicleID:     record.VehicleID,
-// 				ViolationType: record.ViolationReason,
-// 				ViolationTime: violationTime,
-// 				Description:   fmt.Sprintf("停车记录 %d 的违规行为", record.RecordID),
-// 				FineAmount:    fineAmount,
-// 				Status:        status,
-// 				ProcessTime:   processTime,
-// 				CreateTime:    violationTime,
-// 			}
-
-// 			if err := db.Create(&violation).Error; err != nil {
-// 				log.Printf("创建违规记录失败 (记录 %d): %v", record.RecordID, err)
-// 				continue
-// 			}
-
-// 			violationRecords = append(violationRecords, violation)
+// 	// 为每个用户生成违规记录
+// 	for i, user := range users {
+// 		// 每三位最多有两位有违规记录
+// 		// 即：i%3 == 0 的用户可能没有违规，其他两位有违规
+// 		hasViolation := true
+// 		if i%3 == 0 {
+// 			// 第一位可能没有违规（50%概率）
+// 			hasViolation = rand.Float32() < 0.5
 // 		}
-// 	}
 
-// 	// 为未使用的预订生成违规记录
-// 	for _, order := range reservationOrders {
-// 		// 如果预订已过期但未使用（状态为1且结束时间已过）
-// 		if order.Status == 1 && order.EndTime.Before(time.Now()) {
-// 			// 检查是否有对应的停车记录
-// 			hasParkingRecord := false
-// 			for _, record := range parkingRecords {
-// 				if record.UserID == order.UserID &&
-// 					record.VehicleID == order.VehicleID &&
-// 					record.LotID == order.LotID {
-// 					timeDiff := record.EntryTime.Sub(order.StartTime)
-// 					if timeDiff >= -time.Hour && timeDiff <= time.Hour {
-// 						hasParkingRecord = true
-// 						break
-// 					}
+// 		if hasViolation {
+// 			// 每位最少有3条违规记录，最多5条
+// 			numViolations := 3 + rand.Intn(3) // 3, 4, 或 5
+
+// 			// 获取该用户的车辆
+// 			var userVehicles []model.Vehicle
+// 			for _, v := range allVehicles {
+// 				if v.UserID == user.UserID {
+// 					userVehicles = append(userVehicles, v)
 // 				}
 // 			}
 
-// 			// 如果没有对应的停车记录，说明预订未使用
-// 			if !hasParkingRecord {
-// 				violationTime := order.EndTime.Add(30 * time.Minute) // 预订结束后30分钟
-
-// 				status := int8(rand.Intn(2))
-// 				processTime := (*time.Time)(nil)
-// 				if status == 1 {
-// 					pt := violationTime.Add(time.Duration(rand.Intn(7*24*3600)) * time.Second)
-// 					processTime = &pt
+// 			// 获取该用户的停车记录
+// 			var userParkingRecords []model.ParkingRecord
+// 			for _, record := range parkingRecords {
+// 				if record.UserID == user.UserID {
+// 					userParkingRecords = append(userParkingRecords, record)
 // 				}
+// 			}
 
-// 				// 罚款金额：预订费用的1-3倍
-// 				fineAmount := order.TotalFee * (1.0 + rand.Float64()*2.0)
+// 			// 获取该用户的预订订单
+// 			var userReservations []model.ReservationOrder
+// 			for _, order := range reservationOrders {
+// 				if order.UserID == user.UserID {
+// 					userReservations = append(userReservations, order)
+// 				}
+// 			}
 
-// 				// 需要找到对应的停车记录ID（如果没有，使用0）
-// 				recordID := uint(0)
-// 				for _, record := range parkingRecords {
-// 					if record.UserID == order.UserID &&
-// 						record.VehicleID == order.VehicleID &&
-// 						record.LotID == order.LotID {
-// 						recordID = record.RecordID
-// 						break
+// 			for j := 0; j < numViolations; j++ {
+// 				var violation model.ViolationRecord
+// 				var violationTime time.Time
+// 				var vehicle model.Vehicle
+// 				var recordID uint
+
+// 				// 随机选择违规类型：停车违规或预订违规
+// 				if len(userParkingRecords) > 0 && rand.Float32() < 0.7 {
+// 					// 70%概率是停车违规
+// 					record := userParkingRecords[rand.Intn(len(userParkingRecords))]
+// 					vehicle = record.Vehicle
+// 					recordID = record.RecordID
+// 					violationTime = record.EntryTime.Add(time.Duration(rand.Intn(int(record.DurationMinutes))) * time.Minute)
+
+// 					violation = model.ViolationRecord{
+// 						RecordID:      recordID,
+// 						UserID:        user.UserID,
+// 						VehicleID:     vehicle.VehicleID,
+// 						ViolationType: "超时停车",
+// 						ViolationTime: violationTime,
+// 						Description:   fmt.Sprintf("停车记录 %d 的违规行为：超时停车", record.RecordID),
+// 						FineAmount:    record.FeeCalculated * (0.5 + rand.Float64()*1.5),
+// 						Status:        int8(rand.Intn(2)),
+// 						ProcessTime:   nil,
+// 						CreateTime:    violationTime,
 // 					}
-// 				}
+// 					if violation.Status == 1 {
+// 						pt := violationTime.Add(time.Duration(rand.Intn(7*24*3600)) * time.Second)
+// 						violation.ProcessTime = &pt
+// 					}
+// 				} else if len(userReservations) > 0 {
+// 					// 预订违规
+// 					order := userReservations[rand.Intn(len(userReservations))]
+// 					vehicle = order.Vehicle
+// 					recordID = 0 // 预订违规可能没有对应的停车记录
+// 					violationTime = order.EndTime.Add(30 * time.Minute)
 
-// 				violation := model.ViolationRecord{
-// 					RecordID:      recordID,
-// 					UserID:        order.UserID,
-// 					VehicleID:     order.VehicleID,
-// 					ViolationType: "预订未使用",
-// 					ViolationTime: violationTime,
-// 					Description:   fmt.Sprintf("预订订单 %s 未在规定时间内使用", order.ReservationCode),
-// 					FineAmount:    fineAmount,
-// 					Status:        status,
-// 					ProcessTime:   processTime,
-// 					CreateTime:    violationTime,
+// 					// 检查是否有对应的停车记录
+// 					for _, record := range userParkingRecords {
+// 						if record.VehicleID == order.VehicleID && record.LotID == order.LotID {
+// 							timeDiff := record.EntryTime.Sub(order.StartTime)
+// 							if timeDiff >= -time.Hour && timeDiff <= time.Hour {
+// 								recordID = record.RecordID
+// 								break
+// 							}
+// 						}
+// 					}
+
+// 					violation = model.ViolationRecord{
+// 						RecordID:      recordID,
+// 						UserID:        user.UserID,
+// 						VehicleID:     vehicle.VehicleID,
+// 						ViolationType: "预订未使用",
+// 						ViolationTime: violationTime,
+// 						Description:   fmt.Sprintf("预订订单 %s 未在规定时间内使用", order.ReservationCode),
+// 						FineAmount:    order.TotalFee * (1.0 + rand.Float64()*2.0),
+// 						Status:        int8(rand.Intn(2)),
+// 						ProcessTime:   nil,
+// 						CreateTime:    violationTime,
+// 					}
+// 					if violation.Status == 1 {
+// 						pt := violationTime.Add(time.Duration(rand.Intn(7*24*3600)) * time.Second)
+// 						violation.ProcessTime = &pt
+// 					}
+// 				} else {
+// 					// 如果没有停车记录或预订，创建一个通用违规记录
+// 					if len(userVehicles) > 0 {
+// 						vehicle = userVehicles[rand.Intn(len(userVehicles))]
+// 					}
+// 					violationTime = time.Now().AddDate(0, 0, -rand.Intn(30))
+
+// 					violation = model.ViolationRecord{
+// 						RecordID:      0,
+// 						UserID:        user.UserID,
+// 						VehicleID:     vehicle.VehicleID,
+// 						ViolationType: "其他违规",
+// 						ViolationTime: violationTime,
+// 						Description:   fmt.Sprintf("用户 %s 的违规行为", user.Username),
+// 						FineAmount:    50.0 + rand.Float64()*200.0,
+// 						Status:        int8(rand.Intn(2)),
+// 						ProcessTime:   nil,
+// 						CreateTime:    violationTime,
+// 					}
+// 					if violation.Status == 1 {
+// 						pt := violationTime.Add(time.Duration(rand.Intn(7*24*3600)) * time.Second)
+// 						violation.ProcessTime = &pt
+// 					}
 // 				}
 
 // 				if err := db.Create(&violation).Error; err != nil {
-// 					log.Printf("创建预订违规记录失败 (订单 %d): %v", order.OrderID, err)
+// 					log.Printf("创建违规记录失败 (用户 %d, 违规 %d): %v", i+1, j+1, err)
 // 					continue
 // 				}
 
 // 				violationRecords = append(violationRecords, violation)
 // 			}
+// 		}
+
+// 		if (i+1)%10 == 0 {
+// 			fmt.Printf("  已生成 %d 个用户的违规记录...\n", i+1)
 // 		}
 // 	}
 
@@ -551,7 +595,7 @@ var givenNames = []string{"伟", "芳", "娜", "秀英", "敏", "静", "丽", "�
 // 	fmt.Println("==========================================")
 // 	fmt.Println("数据生成完成！")
 // 	fmt.Println("==========================================")
-// 	fmt.Printf("用户数量: %d\n", len(users))
+// 	fmt.Printf("用户数量: %d (user51-user200)\n", len(users))
 // 	fmt.Printf("车辆数量: %d\n", len(allVehicles))
 // 	fmt.Printf("停车记录: %d\n", len(parkingRecords))
 // 	fmt.Printf("预订订单: %d\n", len(reservationOrders))
@@ -559,9 +603,11 @@ var givenNames = []string{"伟", "芳", "娜", "秀英", "敏", "静", "丽", "�
 // 	fmt.Printf("违规记录: %d\n", len(violationRecords))
 // 	fmt.Println()
 // 	fmt.Println("所有用户密码: 12345678")
+// 	fmt.Println("用户名范围: user051 - user200")
+// 	fmt.Println("手机号范围: 13810000050 - 13810000199")
 // }
 
-// 生成随机车牌号
+// // 生成随机车牌号
 // func generateLicensePlate() string {
 // 	prefix := licensePrefixes[rand.Intn(len(licensePrefixes))]
 // 	letter := licenseLetters[rand.Intn(len(licenseLetters))]

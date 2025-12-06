@@ -65,6 +65,14 @@ func InitDB() {
 		log.Fatalf("❌ 获取底层数据库连接失败: %v", err)
 	}
 
+	// ✅ 设置MySQL会话时区为Asia/Shanghai，确保时区一致性
+	// 这确保所有时间操作都使用相同的时区
+	if _, err := sqlDB.Exec("SET time_zone = '+08:00'"); err != nil {
+		log.Printf("⚠️  设置MySQL会话时区失败: %v，但继续运行", err)
+	} else {
+		fmt.Println("✅ MySQL会话时区已设置为Asia/Shanghai (+08:00)")
+	}
+
 	// ✅ 连接池配置
 	sqlDB.SetMaxOpenConns(cfg.Database.MaxOpen)                                 // 最大打开连接数（推荐 100~500）
 	sqlDB.SetMaxIdleConns(cfg.Database.MaxIdle)                                 // 最大空闲连接数（推荐 50~200）

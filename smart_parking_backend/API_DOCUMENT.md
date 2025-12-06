@@ -214,18 +214,20 @@
       - `record_id`：停车记录ID
       - `entry_time`：入场时间
       - `exit_time`：离场时间（如果已离场）
-      - `duration_minute`：停车时长（分钟）
+      - `duration_minute`：停车时长（分钟）**（前端会优先显示停车时长）**
       - `fee_calculated`：计算出的费用
       - `lot`：停车场信息（`lot_id`, `name`, `address`）
       - `vehicle`：车辆信息（`vehicle_id`, `license_plate`, `brand`, `model`, `color`）
+      - **前端显示**：会显示"订单类型: 停车订单"，并优先显示停车时长
     - **违规订单** (`order_type="violation"`)：
       - `violation_id`：违规记录ID
       - `violation_type`：违规类型
-      - `violation_time`：违规时间
+      - `violation_time`：违规时间**（前端会优先显示违规时间）**
       - `description`：违规描述
       - `fine_amount`：罚款金额
       - `status`：违规处理状态（0-未处理，1-已处理）
       - `vehicle`：车辆信息
+      - **前端显示**：会显示"订单类型: 违规事件订单"（不是"预订"），并优先显示违规时间
     - `"violation"`：违规订单
   - `order_details`：订单详细信息，根据订单类型不同包含不同字段：
     - **停车订单（parking）**：
@@ -436,7 +438,19 @@
       "occupancy_rate": 60.0,
       "total_income": 12000.5,
       "avg_daily_income": 800.3,
-      "avg_parking_hours": 2.5
+      "avg_parking_hours": 2.5,
+      "occupancy": [
+        {
+          "space_type": "普通",
+          "total": 150,
+          "occupied": 90
+        },
+        {
+          "space_type": "充电",
+          "total": 50,
+          "occupied": 30
+        }
+      ]
     },
     "metadata": {
       "lot_id": 1,
@@ -446,6 +460,10 @@
     }
   }
   ```
+- **说明**：
+  - `occupancy` 数组按车位类型分组统计，包含"普通"和"充电"两种类型
+  - 每个类型包含 `total`（总数）和 `occupied`（已占用数）
+  - 前端用于生成柱状图展示各类型车位使用详情
 
 ### 4. 违规行为分析（管理员）
 
@@ -462,8 +480,9 @@
     "data": {
       "total_violations": 30,
       "violations_by_type": [
+        { "violation_type": "超时停车", "count": 15 },
         { "violation_type": "预订未使用", "count": 10 },
-        { "violation_type": "超时停车", "count": 20 }
+        { "violation_type": "未支付停车费", "count": 5 }
       ],
       "violations_by_status": [
         { "status": 0, "count": 5 },
@@ -490,6 +509,11 @@
     }
   }
   ```
+- **说明**：
+  - `violations_by_type` 数组固定包含三种违规类型："超时停车"、"预订未使用"、"未支付停车费"
+  - 即使某种类型没有违规记录，也会返回 `count: 0`
+  - `violations_by_status` 数组包含两种状态：`status: 0`（未处理）和 `status: 1`（已处理）
+  - 前端用于生成饼图展示违规类型分布和处理状态分布
 
 ### 5. 报表生成（管理员）
 
@@ -916,12 +940,66 @@
   ```
 - **业务说明**：
   - 根据车牌号查找车辆和用户。
-  - 若当前时间段有有效预约（状态为已预订，且在预订时间段内，允许提前30分钟入场），优先使用该预约车位并将预约状态置为“使用中”（status=2）。
+  - 若当前时间段有有效预约（状态为已预订，且在预订时间段内，允许提前30分钟入场），优先使用该预约车位并将预约状态置为"使用中"（status=2）。
   - 若无预约则分配一个空闲车位。
   - 创建 `ParkingRecord` 并将车位状态置为占用。
-  - **预订状态更新**：如果车辆入场时使用了预订车位，预订状态会自动更新为"使用中"（status=2），前端可通过刷新预订列表获取最新状态。
+  - **预订状态更新**：
+    - 如果车辆入场时使用了预订车位，预订状态会自动更新为"使用中"（status=2）
+    - 时间匹配逻辑：允许在预订开始时间前30分钟至结束时间后30分钟内入场
+    - 前端可通过刷新预订列表获取最新状态
 
-### 7. 车辆出场
+### 7. 检查有效预订（进场前确认）
+
+- **URL**：`POST /api/parking/check-reservation`
+- **处理函数**：`controller.CheckValidReservation`
+- **请求体**：
+  ```json
+  {
+    "license_plate": "粤A12345",  // 必填，车牌号
+    "lot_id": 1                   // 可选，停车场ID（建议提供以提高匹配准确性）
+  }
+  ```
+- **响应**（成功，HTTP 200）：
+  ```json
+  {
+    "has_reservation": true,  // 是否有有效预订
+    "reservation": {          // 预订信息（如果有）
+      "order_id": 1,
+      "reservation_code": "RES-1-1234567890",
+      "start_time": "2025-01-02T10:00:00Z",
+      "end_time": "2025-01-02T12:00:00Z",
+      "status": 1
+    },
+    "space": {                // 车位信息（如果有）
+      "space_id": 10,
+      "space_number": "A-010",
+      "space_type": "普通"
+    },
+    "lot": {                  // 停车场信息（如果有）
+      "lot_id": 1,
+      "name": "智慧城市中心停车场",
+      "address": "xxx路xxx号"
+    }
+  }
+  ```
+- **响应**（无有效预订，HTTP 200）：
+  ```json
+  {
+    "has_reservation": false
+  }
+  ```
+- **业务说明**：
+  - 用于在车辆进场前检查是否有有效预订
+  - **查找条件**：
+    - 车牌号匹配（通过 `license_plate` 查找对应的 `vehicle_id`）
+    - 当前时间在预订时间段内（允许提前30分钟入场）
+    - 状态为"已预订"（status=1）
+    - 如果提供了 `lot_id`，则同时匹配停车场ID（提高匹配准确性）
+  - 前端应在用户点击"确认入场"前调用此接口，传递车牌号和停车场ID
+  - 如果有有效预订，前端显示预订信息提示框，用户点击确定后执行入场
+  - 如果没有有效预订，前端直接执行入场逻辑
+
+### 8. 车辆出场
 
 - **URL**：`POST /api/parking/exit`
 - **处理函数**：`controller.VehicleExit`
@@ -966,7 +1044,11 @@
      - 将车位状态更新为未占用（is_occupied=0）
   5. **处理预约**：
      - 如果该停车记录关联了预约（通过车辆ID和入场时间匹配），将预约状态更新为"已完成"（status=3），并设置 `actual_end_time` 为当前时间
-     - **预订状态更新**：车辆离场后，关联的预订状态会自动更新为"已完成"（status=3），前端可通过刷新预订列表获取最新状态
+     - **预订状态更新**：
+       - 车辆离场后，关联的预订状态会自动更新为"已完成"（status=3）
+       - 查找逻辑：优先查找状态为"使用中"（status=2）的预订，如果找不到则查找状态为"已预订"（status=1）的预订（容错处理）
+       - 时间匹配：允许在预订时间段前后1-2小时范围内匹配，提高容错性
+       - 前端可通过刷新预订列表获取最新状态
   6. **生成支付**：
      - 调用统一支付服务创建支付单（类型为"parking"）
      - 生成模拟支付链接返回前端

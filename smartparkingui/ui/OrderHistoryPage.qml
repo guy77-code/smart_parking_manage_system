@@ -223,28 +223,30 @@ Page {
 
             if (orderType === "parking") {
                 // 停车订单详情
+                text = "订单类型: 停车订单\n"
+                
                 var lot = details.lot || {}
                 var vehicle = details.vehicle || {}
                 var entryTime = details.entry_time || details.entryTime || ""
                 var exitTime = details.exit_time || details.exitTime || ""
                 var durationMinute = details.duration_minute !== undefined ? details.duration_minute : (details.durationMinute || 0)
                 
-                // 显示停车时长
+                // 显示停车时长（优先显示）
                 if (durationMinute > 0) {
                     var hours = Math.floor(durationMinute / 60)
                     var minutes = durationMinute % 60
                     if (hours > 0 && minutes > 0) {
-                        text = "停车时长: " + hours + "小时" + minutes + "分钟\n"
+                        text += "停车时长: " + hours + "小时" + minutes + "分钟\n"
                     } else if (hours > 0) {
-                        text = "停车时长: " + hours + "小时\n"
+                        text += "停车时长: " + hours + "小时\n"
                     } else {
-                        text = "停车时长: " + minutes + "分钟\n"
+                        text += "停车时长: " + minutes + "分钟\n"
                     }
                 } else if (entryTime && exitTime) {
                     // 如果没有duration_minute，尝试计算
-                    text = "停车时间: " + formatDateTime(entryTime) + " 至 " + formatDateTime(exitTime) + "\n"
+                    text += "停车时间: " + formatDateTime(entryTime) + " 至 " + formatDateTime(exitTime) + "\n"
                 } else if (entryTime) {
-                    text = "入场时间: " + formatDateTime(entryTime) + "\n"
+                    text += "入场时间: " + formatDateTime(entryTime) + "\n"
                 }
                 
                 // 显示停车场地点
@@ -273,9 +275,10 @@ Page {
                 var description = details.description || ""
                 var violationType = details.violation_type || details.violationType || ""
                 
-                // 明确说明这是违规事件订单
+                // 明确说明这是违规事件订单（不是"预订"）
                 text = "订单类型: 违规事件订单\n"
                 
+                // 优先显示违规时间
                 if (violationTime) {
                     text += "违规时间: " + formatDateTime(violationTime) + "\n"
                 }

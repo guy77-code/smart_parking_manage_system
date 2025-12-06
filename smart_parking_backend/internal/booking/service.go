@@ -33,16 +33,23 @@ func (s *Service) CreateBooking(userID, vehicleID, lotID uint, start, end time.T
 	if duration <= 0 {
 		return nil, errors.New("预订时间无效")
 	}
-	resCode := fmt.Sprintf("RES-%d-%d", userID, time.Now().UnixNano())
+	// 确保使用Asia/Shanghai时区
+	loc, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		loc = time.Local
+	}
+	now := time.Now().In(loc)
+	
+	resCode := fmt.Sprintf("RES-%d-%d", userID, now.UnixNano())
 	order := &model.ReservationOrder{
 		UserID:          userID,
 		VehicleID:       vehicleID,
 		LotID:           lotID,
 		SpaceID:         space.SpaceID,
-		StartTime:       start,
-		EndTime:         end,
+		StartTime:       start.In(loc), // 确保使用Asia/Shanghai时区
+		EndTime:         end.In(loc),   // 确保使用Asia/Shanghai时区
 		DurationMinutes: duration,
-		BookingTime:     time.Now(),
+		BookingTime:     now,            // 使用Asia/Shanghai时区的当前时间
 		Status:          1,
 		PaymentStatus:   0,
 		ReservationCode: resCode,

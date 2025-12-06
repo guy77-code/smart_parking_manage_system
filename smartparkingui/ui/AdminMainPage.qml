@@ -242,7 +242,7 @@ Page {
                         columnSpacing: 20
                         rowSpacing: 20
 
-                        // 图表1：整体占用情况（饼图）
+                        // 图表1：整体占用情况（饼状图）
                         Rectangle {
                             Layout.fillWidth: true
                             Layout.preferredHeight: 400
@@ -453,7 +453,11 @@ Page {
         // ------------------ 数据处理逻辑更新 ------------------
 
         function updateOccupancyCharts(data) {
-            if (!data || typeof data !== 'object') return
+            console.log("updateOccupancyCharts called with data:", JSON.stringify(data))
+            if (!data || typeof data !== 'object') {
+                console.log("Invalid data in updateOccupancyCharts")
+                return
+            }
 
             // 1. 更新顶部财务卡片
             incomeModel.clear()
@@ -462,7 +466,7 @@ Page {
             incomeModel.append({ "title": "平均使用率", "value": (parseFloat(data.occupancy_rate) || 0).toFixed(2) + "%" })
             incomeModel.append({ "title": "平均停车时长", "value": (parseFloat(data.avg_parking_hours) || 0).toFixed(1) + "h" })
 
-            // 2. 更新饼图（整体状态）
+            // 2. 更新饼状图（整体占用状态）
             try {
                 if (occupancySeries) {
                     occupancySeries.clear()
@@ -483,81 +487,216 @@ Page {
                     }
                 }
             } catch (e) {
-                console.log("Error updating occupancy chart:", e)
+                console.log("Error updating occupancy pie chart:", e)
             }
 
-            // 3. 更新柱状图（分类统计）
+            // 3. 更新柱状图（分类统计：只显示普通和充电两种类型）
             try {
-                if (setTotal) setTotal.clear()
-                if (setOccupied) setOccupied.clear()
-                if (typeAxisX) typeAxisX.categories = []
-            } catch (e) {
-                console.log("Error clearing bar chart:", e)
-            }
-
-            var maxVal = 0
-            if (Array.isArray(data.occupancy)) {
+                console.log("Updating bar chart, data.occupancy:", JSON.stringify(data.occupancy))
+                console.log("Full data object keys:", Object.keys(data))
+                
+                var maxVal = 0
                 var categories = []
-                for (var i = 0; i < data.occupancy.length; i++) {
-                    var item = data.occupancy[i]
-                    var cat = item.space_type || "未知"
-                    var t = Number(item.total || 0)
-                    var o = Number(item.occupied || 0)
-                    categories.push(cat)
-                    if (setTotal) setTotal.append(t)
-                    if (setOccupied) setOccupied.append(o)
-                    if (t > maxVal) maxVal = t
+                var normalTotal = 0
+                var normalOccupied = 0
+                var chargingTotal = 0
+                var chargingOccupied = 0
+                
+                // 先清空现有数据（BarSet使用remove方法，从后往前删除）
+                if (setTotal) {
+                    while (setTotal.count > 0) {
+                        setTotal.remove(setTotal.count - 1)
+                    }
                 }
-                if (typeAxisX) typeAxisX.categories = categories
+                if (setOccupied) {
+                    while (setOccupied.count > 0) {
+                        setOccupied.remove(setOccupied.count - 1)
+                    }
+                }
+                
+                // 清空categories
+                if (typeAxisX) {
+                    typeAxisX.categories = []
+                }
+                
+                if (Array.isArray(data.occupancy) && data.occupancy.length > 0) {
+                    // 只统计普通和充电两种类型
+                    for (var i = 0; i < data.occupancy.length; i++) {
+                        var item = data.occupancy[i]
+                        var spaceType = item.space_type || ""
+                        var t = Number(item.total || 0)
+                        var o = Number(item.occupied || 0)
+                        
+                        console.log("Processing occupancy item:", spaceType, "total:", t, "occupied:", o)
+                        
+                        if (spaceType === "普通") {
+                            normalTotal = t
+                            normalOccupied = o
+                        } else if (spaceType === "充电") {
+                            chargingTotal = t
+                            chargingOccupied = o
+                        }
+                    }
+                } else {
+                    // 如果后端没有返回occupancy数组，尝试从total_spaces计算
+                    console.log("occupancy array not found or empty, trying to calculate from total_spaces")
+                    var totalSpaces = Number(data.total_spaces || 0)
+                    var occupiedSpaces = Number(data.occupied_spaces || 0)
+                    
+                    // 简单估算：假设普通车位占80%，充电车位占20%
+                    normalTotal = Math.floor(totalSpaces * 0.8)
+                    chargingTotal = totalSpaces - normalTotal
+                    normalOccupied = Math.floor(occupiedSpaces * 0.8)
+                    chargingOccupied = occupiedSpaces - normalOccupied
+                    
+                    console.log("Estimated - Normal:", normalTotal, normalOccupied, "Charging:", chargingTotal, chargingOccupied)
+                }
+                
+                // 确保显示普通和充电两种类型（即使数据为0）
+                categories = ["普通", "充电"]
+                console.log("Bar chart data - Normal:", normalTotal, normalOccupied, "Charging:", chargingTotal, chargingOccupied)
+                
+                // 设置categories（必须在append之前）
+                if (typeAxisX) {
+                    typeAxisX.categories = categories
+                }
+                
+                // 追加数据
+                if (setTotal) {
+                    setTotal.append(normalTotal)
+                    setTotal.append(chargingTotal)
+                }
+                if (setOccupied) {
+                    setOccupied.append(normalOccupied)
+                    setOccupied.append(chargingOccupied)
+                }
+                
+                maxVal = Math.max(normalTotal, chargingTotal, normalOccupied, chargingOccupied, 1)
+                if (typeAxisY) {
+                    typeAxisY.max = maxVal > 0 ? maxVal * 1.2 : 10
+                    typeAxisY.min = 0
+                }
+                
+                console.log("Bar chart updated successfully, setTotal.count:", setTotal ? setTotal.count : "N/A", "setOccupied.count:", setOccupied ? setOccupied.count : "N/A")
+            } catch (e) {
+                console.log("Error updating bar chart:", e, e.stack)
             }
-            if (typeAxisY) typeAxisY.max = maxVal > 0 ? maxVal * 1.2 : 10
         }
 
         function updateViolationCharts(data) {
-            if (!data || typeof data !== 'object') return
+            console.log("updateViolationCharts called with data:", JSON.stringify(data))
+            if (!data || typeof data !== 'object') {
+                console.log("Invalid data in updateViolationCharts")
+                return
+            }
 
             // 1. 更新摘要文本
             var summary = "总违规次数: " + (data.total_violations || 0) + 
                           " | 罚款总额: ¥" + (parseFloat(data.total_fines) || 0).toFixed(2)
             violationSummaryText.text = summary
 
-            // 2. 更新类型饼图
+            // 2. 更新类型饼图（显示三种类型：超时停车、预订未使用、未支付停车费）
             try {
+                console.log("Updating violation type chart, data.violations_by_type:", JSON.stringify(data.violations_by_type))
+                
                 if (violationTypeSeries) {
                     violationTypeSeries.clear()
+                    
+                    // 定义三种违规类型及其颜色
+                    var typeColors = {
+                        "超时停车": "#FF5252",
+                        "预订未使用": "#FFC107",
+                        "未支付停车费": "#FF9800"
+                    }
+                    
+                    // 构建类型统计map
+                    var typeMap = {
+                        "超时停车": 0,
+                        "预订未使用": 0,
+                        "未支付停车费": 0
+                    }
+                    
                     if (Array.isArray(data.violations_by_type) && data.violations_by_type.length > 0) {
                         for (var i = 0; i < data.violations_by_type.length; i++) {
                             var tItem = data.violations_by_type[i]
+                            var vType = tItem.violation_type || ""
                             var count = Number(tItem.count || 0)
-                            violationTypeSeries.append((tItem.violation_type || "未知") + ": " + count, count)
+                            if (typeMap.hasOwnProperty(vType)) {
+                                typeMap[vType] = count
+                            }
                         }
-                    } else {
-                        violationTypeSeries.append("无数据", 1)
+                    }
+                    
+                    // 确保显示三种类型（即使值为0，使用最小值0.01来显示）
+                    var requiredTypes = ["超时停车", "预订未使用", "未支付停车费"]
+                    var totalCount = typeMap["超时停车"] + typeMap["预订未使用"] + typeMap["未支付停车费"]
+                    
+                    for (var k = 0; k < requiredTypes.length; k++) {
+                        var vType = requiredTypes[k]
+                        var count = typeMap[vType] || 0
+                        // 如果值为0且总数为0，使用0.01来显示（避免饼图不显示）
+                        var displayValue = (count === 0 && totalCount === 0) ? 0.01 : count
+                        var label = vType + (count > 0 ? (": " + count) : ": 0")
+                        var slice = violationTypeSeries.append(label, displayValue)
+                        if (typeColors[vType]) {
+                            slice.color = typeColors[vType]
+                        }
+                        console.log("Added violation type slice:", vType, "count:", count, "displayValue:", displayValue)
                     }
                 }
             } catch (e) {
-                console.log("Error updating violation type chart:", e)
+                console.log("Error updating violation type chart:", e, e.stack)
             }
 
-            // 3. 更新状态饼图
+            // 3. 更新状态饼图（显示两种状态：处理、未处理）
             try {
+                console.log("Updating violation status chart, data.violations_by_status:", JSON.stringify(data.violations_by_status))
+                
                 if (violationStatusSeries) {
                     violationStatusSeries.clear()
+                    
+                    // 构建状态统计map
+                    var statusMap = {
+                        "处理": 0,
+                        "未处理": 0
+                    }
+                    
                     if (Array.isArray(data.violations_by_status) && data.violations_by_status.length > 0) {
                         for (var k = 0; k < data.violations_by_status.length; k++) {
                             var sItem = data.violations_by_status[k]
-                            var name = sItem.status === 1 ? "已处理" : "未处理"
                             var cnt = Number(sItem.count || 0)
-                            var slice = violationStatusSeries.append(name + ": " + cnt, cnt)
-                            if (sItem.status === 1) slice.color = "#4CAF50"
-                            else slice.color = "#FF5252"
+                            // 注意：status可能是数字或字符串
+                            var status = sItem.status
+                            if (status === 1 || status === "1") {
+                                statusMap["处理"] = cnt
+                            } else {
+                                statusMap["未处理"] = cnt
+                            }
                         }
-                    } else {
-                        violationStatusSeries.append("无数据", 1)
                     }
+                    
+                    // 确保显示两种状态（即使为0，使用最小值0.01来显示）
+                    var processedCount = statusMap["处理"] || 0
+                    var unprocessedCount = statusMap["未处理"] || 0
+                    var totalStatusCount = processedCount + unprocessedCount
+                    
+                    // 如果值为0且总数为0，使用0.01来显示（避免饼图不显示）
+                    var processedValue = (processedCount === 0 && totalStatusCount === 0) ? 0.01 : processedCount
+                    var unprocessedValue = (unprocessedCount === 0 && totalStatusCount === 0) ? 0.01 : unprocessedCount
+                    
+                    var processedLabel = "处理" + (processedCount > 0 ? (": " + processedCount) : ": 0")
+                    var unprocessedLabel = "未处理" + (unprocessedCount > 0 ? (": " + unprocessedCount) : ": 0")
+                    
+                    var processedSlice = violationStatusSeries.append(processedLabel, processedValue)
+                    processedSlice.color = "#4CAF50"
+                    
+                    var unprocessedSlice = violationStatusSeries.append(unprocessedLabel, unprocessedValue)
+                    unprocessedSlice.color = "#FF5252"
+                    
+                    console.log("Added violation status slices - Processed:", processedCount, "Unprocessed:", unprocessedCount)
                 }
             } catch (e) {
-                console.log("Error updating violation status chart:", e)
+                console.log("Error updating violation status chart:", e, e.stack)
             }
         }
 

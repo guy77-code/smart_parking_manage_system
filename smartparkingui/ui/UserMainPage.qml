@@ -192,10 +192,20 @@ Page {
                     }
 
                     // 车辆列表
-                    Text {
-                        text: "我的车辆"
-                        font.pixelSize: 16
-                        font.bold: true
+                    RowLayout {
+                        Layout.fillWidth: true
+                        Text {
+                            text: "我的车辆"
+                            font.pixelSize: 16
+                            font.bold: true
+                        }
+                        Item { Layout.fillWidth: true }
+                        Button {
+                            text: "刷新"
+                            onClicked: {
+                                loadUserVehicles()
+                            }
+                        }
                     }
 
                     ListView {
@@ -856,6 +866,39 @@ Page {
                 return
             }
 
+            // Handle add/delete vehicle response (POST/DELETE /api/v1/vehicles)
+            if (url.indexOf("/api/v1/vehicles") >= 0) {
+                var method = response.method || ""
+                // Check if this is a POST (add) or DELETE (remove) request
+                // POST: /api/v1/vehicles (no ID in URL, returns success message, not array)
+                // DELETE: /api/v1/vehicles/{id} (has ID in URL, returns success message)
+                // GET: /api/v1/vehicles (returns array in data field, handled by onUserVehiclesReceived)
+                var isDeleteRequest = url.match(/\/api\/v1\/vehicles\/\d+$/) !== null
+                var hasDataArray = response.hasOwnProperty("data") && Array.isArray(response.data)
+                var isPostRequest = (method === "POST" || (!isDeleteRequest && !hasDataArray && httpStatus >= 200 && httpStatus < 300))
+                var isDeleteMethod = (method === "DELETE" || isDeleteRequest)
+                
+                if (isPostRequest || isDeleteMethod) {
+                    // Add or delete vehicle successful, refresh the list
+                    if (httpStatus >= 200 && httpStatus < 300 && !response.hasOwnProperty("error")) {
+                        console.log("Vehicle " + (isPostRequest ? "added" : "deleted") + " successfully, refreshing list")
+                        // Clear form fields only for POST (add)
+                        if (isPostRequest) {
+                            licensePlateField.text = ""
+                            brandField.text = ""
+                            modelField.text = ""
+                            colorField.text = ""
+                        }
+                        // Refresh vehicle list after a short delay to ensure backend has updated
+                        Qt.callLater(function() {
+                            loadUserVehicles()
+                        })
+                        return
+                    }
+                }
+                // GET requests are handled by onUserVehiclesReceived
+            }
+
             // Handle booking/user response
             if (url.indexOf("/api/v4/booking/user") >= 0) {
                 bookingModel.clear()
@@ -894,6 +937,10 @@ Page {
                     console.log("Parking entry success, reloading parking status and bookings")
                     loadParkingStatus()
                     // 车辆入场后，如果使用了预订车位，预订状态会更新为使用中，需要刷新预订列表
+                    // 实时刷新预订列表
+                    if (userId > 0) {
+                        apiClient.getUserBookings(userId)
+                    }
                     // 延迟刷新以确保后端状态已更新
                     bookingRefreshTimer.restart()
                 }

@@ -5,6 +5,7 @@ import SmartParking 1.0
 
 Page {
     property var stackView: null
+    property var parentWindow: null  // 用于Dialog的parent
     id: parkingEntryPage
     title: "车辆入场"
 
@@ -117,8 +118,9 @@ Page {
             text: "确认入场"
             enabled: selectedLotId > 0 && selectedVehicleId > 0 && selectedLicensePlate.length > 0
             onClicked: {
-                var spaceType = spaceTypeComboBox.currentText
-                apiClient.vehicleEntry(selectedLicensePlate, spaceType)
+                // 先检查是否有有效预订（传递车牌号和停车场ID）
+                console.log("Checking valid reservation for:", selectedLicensePlate, "lotId:", selectedLotId)
+                apiClient.checkValidReservation(selectedLicensePlate, selectedLotId)
             }
         }
 
@@ -241,8 +243,168 @@ Page {
         }
     }
 
+    // 格式化时间字符串（RFC3339格式转换为可读格式）
+    function formatDateTime(timeStr) {
+        if (!timeStr) return ""
+        try {
+            // 解析RFC3339格式时间（如 "2025-12-06T19:00:00+08:00"）
+            var date = new Date(timeStr)
+            if (isNaN(date.getTime())) {
+                // 如果解析失败，尝试其他格式或直接返回原字符串
+                return timeStr
+            }
+            // 格式化为本地时间字符串：YYYY-MM-DD HH:mm:ss
+            var year = date.getFullYear()
+            var month = String(date.getMonth() + 1).padStart(2, '0')
+            var day = String(date.getDate()).padStart(2, '0')
+            var hour = String(date.getHours()).padStart(2, '0')
+            var minute = String(date.getMinutes()).padStart(2, '0')
+            var second = String(date.getSeconds()).padStart(2, '0')
+            return year + "-" + month + "-" + day + " " + hour + ":" + minute + ":" + second
+        } catch (e) {
+            console.log("Error formatting datetime:", e, "timeStr:", timeStr)
+            return timeStr
+        }
+    }
+
+    // 预订信息提示框
+    Dialog {
+        id: reservationInfoDialog
+        modal: true
+        title: "预约使用成功"
+        standardButtons: Dialog.Ok
+        
+        property var reservationInfo: null
+        
+        width: 450
+        height: 300
+        
+        contentItem: ColumnLayout {
+            anchors.fill: parent
+            anchors.margins: 20
+            spacing: 15
+            
+            Text {
+                id: reservationInfoText
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                font.pixelSize: 14
+                wrapMode: Text.Wrap
+                text: "加载中..."
+            }
+        }
+        
+        onAccepted: {
+            // 用户点击确定后，执行入场逻辑
+            console.log("=== Dialog onAccepted triggered ===")
+            console.log("User confirmed reservation info, proceeding with entry")
+            console.log("selectedLicensePlate:", selectedLicensePlate)
+            console.log("selectedLotId:", selectedLotId)
+            var spaceType = spaceTypeComboBox.currentText
+            console.log("spaceType:", spaceType)
+            console.log("Calling vehicleEntry with:", selectedLicensePlate, spaceType, selectedLotId)
+            
+            if (!selectedLicensePlate || selectedLicensePlate.length === 0) {
+                console.error("Error: selectedLicensePlate is empty, cannot proceed with entry")
+                return
+            }
+            
+            if (selectedLotId <= 0) {
+                console.error("Error: selectedLotId is invalid:", selectedLotId)
+                return
+            }
+            
+            apiClient.vehicleEntry(selectedLicensePlate, spaceType, selectedLotId)
+            console.log("vehicleEntry call completed")
+        }
+    }
+
     Connections {
         target: apiClient
+
+        function onValidReservationChecked(response) {
+            console.log("=== onValidReservationChecked called ===")
+            console.log("Full response:", JSON.stringify(response, null, 2))
+            
+            // 检查响应是否被包装在 data 字段中
+            var actualResponse = response
+            if (response.data && typeof response.data === 'object') {
+                console.log("Response wrapped in data field, unwrapping...")
+                actualResponse = response.data
+            }
+            
+            var hasReservation = actualResponse.has_reservation || false
+            var httpStatus = response.http_status || actualResponse.http_status || 200
+            
+            console.log("has_reservation:", hasReservation, "http_status:", httpStatus)
+            
+            // 如果接口返回错误（如404），也当作没有预订处理
+            if (httpStatus >= 400) {
+                console.log("Check reservation API returned error, treating as no reservation")
+                hasReservation = false
+            }
+            
+            if (hasReservation) {
+                // 有有效预订，显示信息提示框
+                console.log("Has valid reservation, showing info dialog")
+                var reservation = actualResponse.reservation || {}
+                var space = actualResponse.space || {}
+                var lot = actualResponse.lot || {}
+                var vehicle = reservation.vehicle || reservation.Vehicle || {}
+                
+                console.log("Reservation:", JSON.stringify(reservation))
+                console.log("Space:", JSON.stringify(space))
+                console.log("Lot:", JSON.stringify(lot))
+                console.log("Vehicle:", JSON.stringify(vehicle))
+                
+                reservationInfoDialog.reservationInfo = actualResponse
+                
+                // 获取车牌号（优先使用预订中的车辆信息，否则使用用户选择的车牌号）
+                var licensePlate = selectedLicensePlate || 
+                                  vehicle.license_plate || 
+                                  vehicle.licensePlate || 
+                                  vehicle.LicensePlate || 
+                                  ""
+                
+                // 格式化预订信息显示（按照用户要求：车牌号、停车场、预约停放时间、停车位序号、停车位类型）
+                var details = "预约使用成功\n\n"
+                details += "车牌号: " + licensePlate + "\n"
+                details += "停车场: " + (lot.name || "") + "\n"
+                
+                // 预约停放时间
+                if (reservation.start_time) {
+                    details += "预约开始时间: " + formatDateTime(reservation.start_time) + "\n"
+                } else if (reservation.startTime) {
+                    details += "预约开始时间: " + formatDateTime(reservation.startTime) + "\n"
+                }
+                if (reservation.end_time) {
+                    details += "预约结束时间: " + formatDateTime(reservation.end_time) + "\n"
+                } else if (reservation.endTime) {
+                    details += "预约结束时间: " + formatDateTime(reservation.endTime) + "\n"
+                }
+                
+                details += "停车位序号: " + (space.space_number || space.spaceNumber || "") + "\n"
+                details += "停车位类型: " + (space.space_type || space.spaceType || "") + "\n"
+                
+                console.log("Reservation details:", details)
+                reservationInfoText.text = details
+                
+                // 显示提示框，用户点击确定后自动执行入场
+                reservationInfoDialog.open()
+            } else {
+                // 没有有效预订，直接执行停车逻辑
+                console.log("No valid reservation, proceeding with direct entry")
+                var spaceType = spaceTypeComboBox.currentText
+                apiClient.vehicleEntry(selectedLicensePlate, spaceType, selectedLotId)
+            }
+        }
+        
+        function onRequestError(error) {
+            // 如果检查预订接口出错，也当作没有预订处理，直接执行入场
+            console.log("Request error in ParkingEntryPage:", error)
+            // 注意：这里不能直接判断是哪个接口出错，所以不在这里处理
+            // 而是在 onValidReservationChecked 中处理
+        }
 
         function onParkingLotsReceived(lots) {
             parkingLotModel.clear()
@@ -261,16 +423,30 @@ Page {
         }
 
         function onRequestFinished(response) {
-            if (response.hasOwnProperty("error")) {
-                console.log("Error:", response.error)
-                return
-            }
-
+            console.log("=== onRequestFinished in ParkingEntryPage ===")
+            console.log("Response:", JSON.stringify(response))
+            
             var url = response.url || ""
+            var httpStatus = response.http_status || 200
+            
+            console.log("URL:", url, "HTTP Status:", httpStatus)
+            
             if (url.indexOf("/api/parking/entry") >= 0) {
-                // 入场成功，返回上一页
-                if (stackView) {
-                    stackView.pop()
+                console.log("Vehicle entry response received")
+                if (response.hasOwnProperty("error")) {
+                    console.error("Vehicle entry error:", response.error)
+                    return
+                }
+                
+                if (httpStatus >= 200 && httpStatus < 300) {
+                    console.log("Vehicle entry successful, popping page")
+                    // 入场成功，刷新预订列表并返回上一页
+                    // 通知父页面刷新预订列表
+                    if (stackView) {
+                        stackView.pop()
+                    }
+                } else {
+                    console.error("Vehicle entry failed with HTTP status:", httpStatus)
                 }
             }
         }

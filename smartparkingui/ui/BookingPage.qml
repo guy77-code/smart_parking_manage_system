@@ -271,7 +271,8 @@ Page {
         }
     }
 
-    // 将年月日时分 SpinBox 转换为 RFC3339 字符串
+    // 将年月日时分 SpinBox 转换为时间字符串
+    // 修复时区问题：发送本地时间（不带 Z），后端会按本地时区处理
     function formatDateTime(y, m, d, h, min) {
         function pad2(n) { return n < 10 ? "0" + n : "" + n }
         var year = y.value
@@ -280,7 +281,8 @@ Page {
         var hour = pad2(h.value)
         var minute = pad2(min.value)
         var second = "00"
-        return year + "-" + month + "-" + day + "T" + hour + ":" + minute + ":" + second + "Z"
+        // 发送本地时间格式，不带时区标识（后端会按本地时区处理）
+        return year + "-" + month + "-" + day + " " + hour + ":" + minute + ":" + second
     }
 
     function loadUserVehicles() {

@@ -43,8 +43,9 @@ public:
     Q_INVOKABLE void getParkingSpaces(int lotId);
     Q_INVOKABLE void getParkingLotOccupancy(int lotId);
     Q_INVOKABLE void getUserActiveParkingRecords(int userId);
-    Q_INVOKABLE void vehicleEntry(const QString &licensePlate, const QString &spaceType = "");
+    Q_INVOKABLE void vehicleEntry(const QString &licensePlate, const QString &spaceType = "", int lotId = 0);
     Q_INVOKABLE void vehicleExit(const QString &licensePlate);
+    Q_INVOKABLE void checkValidReservation(const QString &licensePlate, int lotId = 0);
 
     // Admin parking lot management
     Q_INVOKABLE void addParkingLot(const QString &name,
@@ -97,6 +98,7 @@ signals:
     void violationsReceived(const QJsonObject &response);
     void paymentCreated(const QJsonObject &payment);
     void paymentNotified(const QJsonObject &response);
+    void validReservationChecked(const QJsonObject &response);
 
 private slots:
     void onRequestFinished(QNetworkReply *reply);

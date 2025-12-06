@@ -76,13 +76,15 @@ func InitRouter(bookingSvc *booking.Service, paymentCfg *payment.Service) *gin.E
 	// -------------------- 停车模块 --------------------
 	parkingGroup := r.Group("/api/parking")
 	{
+		// 注意：具体路由要放在参数路由之前，避免路由冲突
 		parkingGroup.POST("/entry", controller.VehicleEntry)                                   // 车辆入场
 		parkingGroup.POST("/exit", controller.VehicleExit)                                     // 车辆出场
+		parkingGroup.POST("/check-reservation", controller.CheckValidReservation)              // 检查有效预订（进场前确认）
 		parkingGroup.GET("/space-types", controller.GetParkingSpaceTypes)                      // 获取车位类型
-		parkingGroup.GET("/lots/:lot_id/spaces", controller.GetParkingLotSpaces)               // 获取停车场车位信息
-		parkingGroup.GET("/:user_id/active-parking", controller.GetUserActiveParkingRecords)   // 获取用户在场停车记录
 		parkingGroup.GET("/getlicense/:license_plate", controller.GetVehicleByLicensePlate)    // 根据车牌号获取车辆信息
 		parkingGroup.GET("/getparkinglotoccupancy/:lot_id", controller.GetParkingLotOccupancy) // 实时获取停车场车位信息
+		parkingGroup.GET("/lots/:lot_id/spaces", controller.GetParkingLotSpaces)               // 获取停车场车位信息
+		parkingGroup.GET("/:user_id/active-parking", controller.GetUserActiveParkingRecords)   // 获取用户在场停车记录（放在最后，避免冲突）
 	}
 
 	//违规管理路由

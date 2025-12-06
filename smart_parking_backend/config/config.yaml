@@ -24,7 +24,7 @@ database:
   name: "smart_parking"
   charset: "utf8mb4"
   parseTime: true
-  loc: "Local"
+  loc: "Asia%2FShanghai"  # 明确指定时区为Asia/Shanghai（URL编码：%2F表示/）
   maxOpen: 500      # 最大并发连接
   maxIdle: 100      # 空闲连接
   maxLife: 30       # 每个连接最多存活30分钟

@@ -159,6 +159,94 @@ func getParkingOccupancyStats(lotID uint, startTime, endTime time.Time) (map[str
 	}
 	occupancyStats["avg_parking_hours"] = avgDuration.AvgDuration / 60
 
+	// 按车位类型统计（普通、充电）
+	var occupancyByType []map[string]interface{}
+	
+	// 统计普通车位
+	var normalStats struct {
+		Total    int64
+		Occupied int64
+	}
+	
+	// 普通车位总数
+	err = inits.DB.Model(&model.ParkingSpace{}).
+		Where("lot_id = ? AND space_type = ?", lotID, "普通").
+		Count(&normalStats.Total).Error
+	if err != nil {
+		return nil, err
+	}
+	
+	// 普通车位已占用数
+	normalOccupiedSubQuery := inits.DB.Model(&model.ParkingRecord{}).
+		Select("DISTINCT space_id").
+		Where("lot_id = ? AND entry_time <= ? AND (exit_time >= ? OR exit_time IS NULL)",
+			lotID, endTime, startTime)
+	
+	err = inits.DB.Model(&model.ParkingSpace{}).
+		Where("lot_id = ? AND space_type = ? AND space_id IN (?)", lotID, "普通", normalOccupiedSubQuery).
+		Count(&normalStats.Occupied).Error
+	if err != nil {
+		return nil, err
+	}
+	
+	occupancyByType = append(occupancyByType, map[string]interface{}{
+		"space_type": "普通",
+		"total":      normalStats.Total,
+		"occupied":   normalStats.Occupied,
+	})
+	
+	// 统计充电车位
+	var chargingStats struct {
+		Total    int64
+		Occupied int64
+	}
+	
+	// 充电车位总数
+	err = inits.DB.Model(&model.ParkingSpace{}).
+		Where("lot_id = ? AND space_type = ?", lotID, "充电").
+		Count(&chargingStats.Total).Error
+	if err != nil {
+		return nil, err
+	}
+	
+	// 充电车位已占用数
+	chargingOccupiedSubQuery := inits.DB.Model(&model.ParkingRecord{}).
+		Select("DISTINCT space_id").
+		Where("lot_id = ? AND entry_time <= ? AND (exit_time >= ? OR exit_time IS NULL)",
+			lotID, endTime, startTime)
+	
+	err = inits.DB.Model(&model.ParkingSpace{}).
+		Where("lot_id = ? AND space_type = ? AND space_id IN (?)", lotID, "充电", chargingOccupiedSubQuery).
+		Count(&chargingStats.Occupied).Error
+	if err != nil {
+		return nil, err
+	}
+	
+	occupancyByType = append(occupancyByType, map[string]interface{}{
+		"space_type": "充电",
+		"total":      chargingStats.Total,
+		"occupied":   chargingStats.Occupied,
+	})
+	
+	// 确保occupancy字段被添加到返回结果中
+	occupancyStats["occupancy"] = occupancyByType
+	
+	// 调试日志：确保occupancy数组被正确添加
+	if len(occupancyByType) == 0 {
+		// 如果数组为空，至少添加默认值
+		occupancyByType = append(occupancyByType, map[string]interface{}{
+			"space_type": "普通",
+			"total":      0,
+			"occupied":   0,
+		})
+		occupancyByType = append(occupancyByType, map[string]interface{}{
+			"space_type": "充电",
+			"total":      0,
+			"occupied":   0,
+		})
+		occupancyStats["occupancy"] = occupancyByType
+	}
+
 	return occupancyStats, nil
 }
 
@@ -236,50 +324,157 @@ func ViolationAnalysis(c *gin.Context) {
 func getViolationStats(lotID uint, startTime, endTime time.Time) (map[string]interface{}, error) {
 	var stats = make(map[string]interface{})
 
-	// 1. 统计总违规次数
-	var totalViolations int64
+	// 1. 统计总违规次数（包括所有类型的违规）
+	// 先统计有停车记录关联的违规
+	var violationsWithRecord int64
 	err := inits.DB.Model(&model.ViolationRecord{}).
 		Joins("JOIN parking_record ON violation_record.record_id = parking_record.record_id").
 		Where("parking_record.lot_id = ? AND violation_record.violation_time BETWEEN ? AND ?",
 			lotID, startTime, endTime).
-		Count(&totalViolations).Error
+		Count(&violationsWithRecord).Error
 	if err != nil {
 		return nil, err
 	}
+	
+	// 统计未支付停车费违规（通过车辆关联到该停车场的停车记录）
+	var unpaidParkingViolationsCount int64
+	err = inits.DB.Model(&model.ViolationRecord{}).
+		Joins("JOIN vehicle ON violation_record.vehicle_id = vehicle.vehicle_id").
+		Joins("JOIN parking_record ON vehicle.vehicle_id = parking_record.vehicle_id").
+		Where("parking_record.lot_id = ? AND violation_record.violation_type = ? AND violation_record.violation_time BETWEEN ? AND ?",
+			lotID, "未支付停车费", startTime, endTime).
+		Distinct("violation_record.violation_id").
+		Count(&unpaidParkingViolationsCount).Error
+	if err != nil {
+		// 如果查询失败，设为0（保守策略）
+		unpaidParkingViolationsCount = 0
+	}
+	
+	totalViolations := violationsWithRecord + unpaidParkingViolationsCount
 	stats["total_violations"] = totalViolations
 
-	// 2. 按违规类型统计
-	var violationsByType []struct {
+	// 2. 按违规类型统计（确保包含三种类型：超时停车、预订未使用、未支付停车费）
+	// 先统计所有违规类型
+	var violationsByTypeRaw []struct {
 		ViolationType string
 		Count         int64
 	}
+	
+	// 查询有停车记录关联的违规（超时停车、预订未使用等）
 	err = inits.DB.Model(&model.ViolationRecord{}).
 		Select("violation_type, COUNT(*) as count").
 		Joins("JOIN parking_record ON violation_record.record_id = parking_record.record_id").
 		Where("parking_record.lot_id = ? AND violation_record.violation_time BETWEEN ? AND ?",
 			lotID, startTime, endTime).
 		Group("violation_type").
-		Scan(&violationsByType).Error
+		Scan(&violationsByTypeRaw).Error
 	if err != nil {
 		return nil, err
 	}
+	
+	// 查询未支付停车费违规（通过车辆关联到该停车场的停车记录）
+	// 注意：未支付停车费的record_id可能为0，需要通过车辆关联停车场
+	var unpaidParkingViolations int64
+	err = inits.DB.Model(&model.ViolationRecord{}).
+		Joins("JOIN vehicle ON violation_record.vehicle_id = vehicle.vehicle_id").
+		Joins("JOIN parking_record ON vehicle.vehicle_id = parking_record.vehicle_id").
+		Where("parking_record.lot_id = ? AND violation_record.violation_type = ? AND violation_record.violation_time BETWEEN ? AND ?",
+			lotID, "未支付停车费", startTime, endTime).
+		Distinct("violation_record.violation_id").
+		Count(&unpaidParkingViolations).Error
+	if err != nil {
+		// 如果查询失败，设为0（保守策略）
+		unpaidParkingViolations = 0
+	}
+	
+	// 构建标准化的违规类型统计（确保三种类型都存在）
+	violationsByType := make([]map[string]interface{}, 0)
+	typeCountMap := make(map[string]int64)
+	
+	// 将查询结果放入map
+	for _, item := range violationsByTypeRaw {
+		typeCountMap[item.ViolationType] = item.Count
+	}
+	
+	// 添加未支付停车费统计
+	if unpaidParkingViolations > 0 {
+		typeCountMap["未支付停车费"] = unpaidParkingViolations
+	}
+	
+	// 确保三种类型都存在（即使为0）
+	requiredTypes := []string{"超时停车", "预订未使用", "未支付停车费"}
+	for _, vType := range requiredTypes {
+		count := typeCountMap[vType]
+		if count == 0 {
+			// 如果该类型没有数据，也要显示为0
+			count = 0
+		}
+		violationsByType = append(violationsByType, map[string]interface{}{
+			"violation_type": vType,
+			"count":          count,
+		})
+	}
+	
 	stats["violations_by_type"] = violationsByType
 
-	// 3. 按处理状态统计
-	var violationsByStatus []struct {
+	// 3. 按处理状态统计（包括所有类型的违规）
+	// 先统计有停车记录关联的违规状态
+	var violationsByStatusRaw []struct {
 		Status int8
 		Count  int64
 	}
 	err = inits.DB.Model(&model.ViolationRecord{}).
-		Select("status, COUNT(*) as count").
+		Select("violation_record.status, COUNT(*) as count").
 		Joins("JOIN parking_record ON violation_record.record_id = parking_record.record_id").
 		Where("parking_record.lot_id = ? AND violation_record.violation_time BETWEEN ? AND ?",
 			lotID, startTime, endTime).
-		Group("status").
-		Scan(&violationsByStatus).Error
+		Group("violation_record.status").
+		Scan(&violationsByStatusRaw).Error
 	if err != nil {
 		return nil, err
 	}
+	
+	// 统计未支付停车费违规的状态（通过车辆关联到该停车场的停车记录）
+	var unpaidStatusStats []struct {
+		Status int8
+		Count  int64
+	}
+	err = inits.DB.Model(&model.ViolationRecord{}).
+		Select("violation_record.status, COUNT(DISTINCT violation_record.violation_id) as count").
+		Joins("JOIN vehicle ON violation_record.vehicle_id = vehicle.vehicle_id").
+		Joins("JOIN parking_record ON vehicle.vehicle_id = parking_record.vehicle_id").
+		Where("parking_record.lot_id = ? AND violation_record.violation_type = ? AND violation_record.violation_time BETWEEN ? AND ?",
+			lotID, "未支付停车费", startTime, endTime).
+		Group("violation_record.status").
+		Scan(&unpaidStatusStats).Error
+	if err != nil {
+		// 如果查询失败，忽略未支付停车费的状态统计
+		unpaidStatusStats = []struct {
+			Status int8
+			Count  int64
+		}{}
+	}
+	
+	// 合并状态统计
+	statusMap := make(map[int8]int64)
+	for _, item := range violationsByStatusRaw {
+		statusMap[item.Status] += item.Count
+	}
+	for _, item := range unpaidStatusStats {
+		statusMap[item.Status] += item.Count
+	}
+	
+	// 构建标准化的状态统计（确保两种状态都存在）
+	violationsByStatus := make([]map[string]interface{}, 0)
+	// 确保显示两种状态：0-未处理，1-已处理
+	for _, status := range []int8{0, 1} {
+		count := statusMap[status]
+		violationsByStatus = append(violationsByStatus, map[string]interface{}{
+			"status": status,
+			"count":  count,
+		})
+	}
+	
 	stats["violations_by_status"] = violationsByStatus
 
 	// 4. 统计罚款总额

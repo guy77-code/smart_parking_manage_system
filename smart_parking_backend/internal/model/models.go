@@ -1,8 +1,88 @@
 package model
 
 import (
+	"database/sql/driver"
+	"encoding/json"
+	"fmt"
 	"time"
 )
+
+// LocalTime 自定义时间类型，JSON序列化时不包含时区信息
+// 解决JSON序列化时显示+8:00后缀的问题
+type LocalTime time.Time
+
+// MarshalJSON 实现json.Marshaler接口，序列化为本地时间格式（不带时区）
+func (t LocalTime) MarshalJSON() ([]byte, error) {
+	// 转换为time.Time
+	tm := time.Time(t)
+	// 格式化为本地时间字符串（不带时区信息）
+	formatted := tm.Format("2006-01-02 15:04:05")
+	return json.Marshal(formatted)
+}
+
+// UnmarshalJSON 实现json.Unmarshaler接口
+func (t *LocalTime) UnmarshalJSON(data []byte) error {
+	var str string
+	if err := json.Unmarshal(data, &str); err != nil {
+		return err
+	}
+	// 解析为本地时间
+	parsed, err := time.ParseInLocation("2006-01-02 15:04:05", str, time.Local)
+	if err != nil {
+		// 尝试解析RFC3339格式
+		parsed, err = time.Parse(time.RFC3339, str)
+		if err != nil {
+			return err
+		}
+		// 转换为本地时区
+		parsed = parsed.In(time.Local)
+	}
+	*t = LocalTime(parsed)
+	return nil
+}
+
+// Value 实现driver.Valuer接口，用于数据库存储
+func (t LocalTime) Value() (driver.Value, error) {
+	return time.Time(t), nil
+}
+
+// Scan 实现sql.Scanner接口，用于数据库读取
+func (t *LocalTime) Scan(value interface{}) error {
+	if value == nil {
+		return nil
+	}
+	switch v := value.(type) {
+	case time.Time:
+		*t = LocalTime(v)
+		return nil
+	case []byte:
+		parsed, err := time.ParseInLocation("2006-01-02 15:04:05", string(v), time.Local)
+		if err != nil {
+			return err
+		}
+		*t = LocalTime(parsed)
+		return nil
+	case string:
+		parsed, err := time.ParseInLocation("2006-01-02 15:04:05", v, time.Local)
+		if err != nil {
+			return err
+		}
+		*t = LocalTime(parsed)
+		return nil
+	default:
+		return fmt.Errorf("无法扫描 %T 到 LocalTime", value)
+	}
+}
+
+// Time 转换为time.Time
+func (t LocalTime) Time() time.Time {
+	return time.Time(t)
+}
+
+// String 实现Stringer接口
+func (t LocalTime) String() string {
+	return time.Time(t).Format("2006-01-02 15:04:05")
+}
 
 // ////////////////////
 // 用户信息表

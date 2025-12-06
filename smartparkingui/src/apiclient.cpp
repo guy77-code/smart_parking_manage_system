@@ -5,6 +5,7 @@
 #include <QHttpMultiPart>
 #include <QDebug>
 #include <QUrlQuery>
+#include <QRegularExpression>
 
 ApiClient::ApiClient(QObject *parent)
     : QObject(parent)
@@ -123,8 +124,30 @@ void ApiClient::onRequestFinished(QNetworkReply *reply)
     QJsonObject response = parseResponse(reply);
     int httpStatus = response.value("http_status").toInt();
     
+    qDebug() << "ApiClient::onRequestFinished" << url << "HTTP Status:" << httpStatus;
+    
     // Store URL in response for QML to identify request type
     response["url"] = url;
+    
+    // Detect HTTP method from reply operation
+    QString method = "GET"; // default
+    QNetworkAccessManager::Operation op = reply->operation();
+    if (op == QNetworkAccessManager::PostOperation) {
+        method = "POST";
+    } else if (op == QNetworkAccessManager::DeleteOperation) {
+        method = "DELETE";
+    } else if (op == QNetworkAccessManager::GetOperation) {
+        method = "GET";
+    } else if (op == QNetworkAccessManager::PutOperation) {
+        method = "PUT";
+    } else if (op == QNetworkAccessManager::CustomOperation) {
+        // For custom operations, try to detect from URL pattern
+        QRegularExpression deletePattern("/api/v1/vehicles/\\d+$");
+        if (deletePattern.match(url).hasMatch()) {
+            method = "DELETE";
+        }
+    }
+    response["method"] = method;
     
     if (httpStatus >= 200 && httpStatus < 300) {
         // Parse response and emit specific signals
@@ -142,17 +165,22 @@ void ApiClient::onRequestFinished(QNetworkReply *reply)
         } else if (url.contains("/api/v1/register")) {
             emit registerSuccess(response);
         } else if (url.contains("/api/v1/vehicles")) {
-            QJsonArray vehicles;
-            if (response.contains("data") && response["data"].isArray()) {
-                vehicles = response["data"].toArray();
-            } else if (response.contains("data") && response["data"].isObject()) {
-                // 兼容意外包了一层对象的情况
-                QJsonObject dataObj = response["data"].toObject();
-                if (dataObj.contains("data") && dataObj["data"].isArray()) {
-                    vehicles = dataObj["data"].toArray();
+            QString method = response.value("method").toString();
+            if (method == "GET") {
+                // GET request: return vehicle list
+                QJsonArray vehicles;
+                if (response.contains("data") && response["data"].isArray()) {
+                    vehicles = response["data"].toArray();
+                } else if (response.contains("data") && response["data"].isObject()) {
+                    // 兼容意外包了一层对象的情况
+                    QJsonObject dataObj = response["data"].toObject();
+                    if (dataObj.contains("data") && dataObj["data"].isArray()) {
+                        vehicles = dataObj["data"].toArray();
+                    }
                 }
+                emit userVehiclesReceived(vehicles);
             }
-            emit userVehiclesReceived(vehicles);
+            // POST and DELETE are handled in QML's onRequestFinished
         } else if (url.contains("/api/v2/getparkinglots")) {
             QJsonArray lots;
             if (response.contains("data")) {
@@ -186,14 +214,25 @@ void ApiClient::onRequestFinished(QNetworkReply *reply)
             emit paymentCreated(response);
         } else if (url.contains("/payment/notify")) {
             emit paymentNotified(response);
+        } else if (url.contains("/api/parking/check-reservation")) {
+            emit validReservationChecked(response);
         }
     } else {
-        QString error = response.value("error").toString();
-        if (error.isEmpty()) {
-            error = response.value("message").toString();
-        }
-        if (!error.isEmpty()) {
-            emit requestError(error);
+        // 对于检查预订接口，即使出错也要发出信号，让前端知道没有预订
+        if (url.contains("/api/parking/check-reservation")) {
+            QJsonObject fallbackResponse;
+            fallbackResponse["has_reservation"] = false;
+            fallbackResponse["url"] = url;
+            fallbackResponse["http_status"] = httpStatus;
+            emit validReservationChecked(fallbackResponse);
+        } else {
+            QString error = response.value("error").toString();
+            if (error.isEmpty()) {
+                error = response.value("message").toString();
+            }
+            if (!error.isEmpty()) {
+                emit requestError(error);
+            }
         }
     }
     
@@ -298,12 +337,15 @@ void ApiClient::getUserActiveParkingRecords(int userId)
     makeRequest("GET", QString("/api/parking/%1/active-parking").arg(userId));
 }
 
-void ApiClient::vehicleEntry(const QString &licensePlate, const QString &spaceType)
+void ApiClient::vehicleEntry(const QString &licensePlate, const QString &spaceType, int lotId)
 {
     QJsonObject data;
     data["license_plate"] = licensePlate;
     if (!spaceType.isEmpty()) {
         data["space_type"] = spaceType;
+    }
+    if (lotId > 0) {
+        data["lot_id"] = lotId;
     }
     makeRequest("POST", "/api/parking/entry", data);
 }
@@ -313,6 +355,17 @@ void ApiClient::vehicleExit(const QString &licensePlate)
     QJsonObject data;
     data["license_plate"] = licensePlate;
     makeRequest("POST", "/api/parking/exit", data);
+}
+
+void ApiClient::checkValidReservation(const QString &licensePlate, int lotId)
+{
+    QJsonObject data;
+    data["license_plate"] = licensePlate;
+    if (lotId > 0) {
+        data["lot_id"] = lotId;
+    }
+    qDebug() << "ApiClient::checkValidReservation called with license_plate:" << licensePlate << "lotId:" << lotId;
+    makeRequest("POST", "/api/parking/check-reservation", data);
 }
 
 // Admin parking lot management

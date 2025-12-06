@@ -120,7 +120,8 @@ func checkViolations(recordID uint) (float64, bool) {
 // VehicleEntryRequest 车辆入场请求
 type VehicleEntryRequest struct {
 	LicensePlate string `json:"license_plate" binding:"required"` // 车牌号
-	SpaceType    string `json:"space_type"`                       // 车位类型（普通、充电桩等）
+	SpaceType    string `json:"space_type"`                        // 车位类型（普通、充电桩等）
+	LotID        uint   `json:"lot_id"`                            // 停车场ID（可选，如果提供则用于精确匹配预订）
 }
 
 // VehicleEntryResponse 车辆入场响应
@@ -164,11 +165,27 @@ func VehicleEntry(c *gin.Context) {
 	}
 
 	// 2. 检查是否有有效的预约（使用事务查询）
-	reservation, space, lot, err := findValidReservationWithTx(tx, vehicle.VehicleID)
-	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
-		tx.Rollback()
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "查询预约信息失败"})
-		return
+	// 严格按照用户要求：按车牌号、停车场、当前时间筛选
+	// 如果提供了停车场ID，则必须匹配该停车场；否则不限制停车场（兼容旧逻辑）
+	var reservation *model.ReservationOrder
+	var space *model.ParkingSpace
+	var lot *model.ParkingLot
+	if req.LotID > 0 {
+		// 如果提供了停车场ID，必须按停车场匹配
+		reservation, space, lot, err = findValidReservationWithTx(tx, vehicle.VehicleID, req.LotID)
+		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+			tx.Rollback()
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "查询预约信息失败"})
+			return
+		}
+	} else {
+		// 如果没有提供停车场ID，则不限制停车场（兼容旧逻辑）
+		reservation, space, lot, err = findValidReservationWithTx(tx, vehicle.VehicleID, 0)
+		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+			tx.Rollback()
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "查询预约信息失败"})
+			return
+		}
 	}
 
 	// 3. 如果没有有效预约，分配新车位（使用事务查询）
@@ -242,23 +259,42 @@ func findVehicleAndUser(licensePlate string) (*model.Vehicle, *model.Users_list,
 
 // findValidReservation 查找有效的预约（使用非事务DB，用于兼容旧代码）
 func findValidReservation(vehicleID uint) (*model.ReservationOrder, *model.ParkingSpace, *model.ParkingLot, error) {
-	return findValidReservationWithTx(inits.DB, vehicleID)
+	return findValidReservationWithTx(inits.DB, vehicleID, 0)
+}
+
+// findValidReservationByVehicleAndLot 根据车辆ID和停车场ID查找有效预订（用于检查预订接口）
+func findValidReservationByVehicleAndLot(vehicleID uint, lotID uint) (*model.ReservationOrder, *model.ParkingSpace, *model.ParkingLot, error) {
+	return findValidReservationWithTx(inits.DB, vehicleID, lotID)
 }
 
 // findValidReservationWithTx 查找有效的预约（支持事务）
-func findValidReservationWithTx(db *gorm.DB, vehicleID uint) (*model.ReservationOrder, *model.ParkingSpace, *model.ParkingLot, error) {
+// 严格按照用户要求：按车牌号（vehicleID）、停车场（lotID）、当前时间筛选
+// 查找当前时间在预约时间段内且状态为已预订的预约
+func findValidReservationWithTx(db *gorm.DB, vehicleID uint, lotID uint) (*model.ReservationOrder, *model.ParkingSpace, *model.ParkingLot, error) {
 	now := time.Now()
 	var reservation model.ReservationOrder
 
 	// 查找当前时间在预约时间段内且状态为已预订的预约
 	// 允许在预订开始时间前30分钟内入场（给予缓冲时间）
-	bufferTime := now.Add(30 * time.Minute)
-	err := db.
+	bufferTime := 30 * time.Minute
+	earliestEntryTime := now.Add(-bufferTime)
+	
+	// 构建查询条件：必须匹配车牌号、当前时间
+	query := db.
 		Where("vehicle_id = ?", vehicleID).
-		Where("start_time <= ? AND end_time >= ?", bufferTime, now).
-		Where("status = ?", 1). // 1-已预订
+		Where("start_time <= ? AND end_time >= ?", now.Add(bufferTime), earliestEntryTime).
+		Where("status = ?", 1) // 1-已预订
+	
+	// 如果提供了停车场ID，则必须匹配停车场（严格要求）
+	if lotID > 0 {
+		query = query.Where("lot_id = ?", lotID)
+	}
+	
+	// 执行查询
+	err := query.
 		Preload("Space").
 		Preload("Lot").
+		Preload("Vehicle"). // 预加载车辆信息
 		Order("start_time ASC"). // 如果有多个，选择最早开始的
 		First(&reservation).Error
 
@@ -471,6 +507,73 @@ func GetParkingLotOccupancy(c *gin.Context) {
 	})
 }
 
+// CheckValidReservationRequest 检查有效预订请求
+type CheckValidReservationRequest struct {
+	LicensePlate string `json:"license_plate" binding:"required"` // 车牌号
+	LotID        uint   `json:"lot_id" binding:"required"`         // 停车场ID（必填，用于精确匹配）
+}
+
+// CheckValidReservationResponse 检查有效预订响应
+type CheckValidReservationResponse struct {
+	HasReservation bool                      `json:"has_reservation"` // 是否有有效预订
+	Reservation    *model.ReservationOrder  `json:"reservation,omitempty"` // 预订信息（如果有）
+	Space          *model.ParkingSpace       `json:"space,omitempty"`      // 车位信息（如果有）
+	Lot            *model.ParkingLot         `json:"lot,omitempty"`        // 停车场信息（如果有）
+}
+
+// CheckValidReservation 检查车辆是否有有效预订（用于进场前确认）
+func CheckValidReservation(c *gin.Context) {
+	var req CheckValidReservationRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的请求参数"})
+		return
+	}
+
+	// 1. 根据车牌号查找车辆信息
+	vehicle, _, err := findVehicleAndUser(req.LicensePlate)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusOK, CheckValidReservationResponse{
+				HasReservation: false,
+			})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "查询车辆信息失败"})
+		return
+	}
+
+	// 2. 查找有效预订（必须按车牌号、停车场、当前时间筛选）
+	// 严格按照用户要求：车牌号、停车场、当前时间
+	if req.LotID == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "停车场ID不能为空"})
+		return
+	}
+	reservation, space, lot, err := findValidReservationByVehicleAndLot(vehicle.VehicleID, req.LotID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusOK, CheckValidReservationResponse{
+				HasReservation: false,
+			})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "查询预订信息失败"})
+		return
+	}
+
+	// 3. 预加载车辆信息到预订对象中
+	if err := inits.DB.Preload("Vehicle").First(reservation, reservation.OrderID).Error; err != nil {
+		log.Printf("Warning: Failed to preload vehicle info for reservation: %v", err)
+	}
+
+	// 4. 返回预订信息
+	c.JSON(http.StatusOK, CheckValidReservationResponse{
+		HasReservation: true,
+		Reservation:    reservation,
+		Space:          space,
+		Lot:            lot,
+	})
+}
+
 // ==================== 车辆出场功能 ====================
 
 // VehicleExitRequest 车辆出场请求
@@ -583,15 +686,17 @@ func VehicleExit(c *gin.Context) {
 	}
 
 	// 4. 查找关联的预约记录（使用事务查询）
-	reservation, err := findActiveReservationWithTx(tx, record.VehicleID, record.EntryTime)
+	// 严格按照用户要求：按车牌号、停车场、停车位类型、停车位序号，按离场时间最近的一次预订时间筛选
+	reservation, err := findActiveReservationForExit(tx, record.VehicleID, record.LotID, space.SpaceType, space.SpaceNumber, exitTime)
 	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		tx.Rollback()
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "查询预约信息失败"})
 		return
 	}
 
-	// 5. 如果有预约，更新预约状态为已完成
-	if reservation != nil {
+	// 5. 如果有预约且状态为"使用中"，更新预约状态为已完成
+	// 严格按照用户要求：如果第一条预订订单状态为"使用中"，则改为"已完成"；如果第一条是其它状态，则不更改
+	if reservation != nil && reservation.Status == 2 { // 2-使用中
 		actualEndTime := exitTime
 		if err := tx.Model(&model.ReservationOrder{}).
 			Where("order_id = ?", reservation.OrderID).
@@ -660,15 +765,79 @@ func findActiveReservation(vehicleID uint, entryTime time.Time) (*model.Reservat
 	return findActiveReservationWithTx(inits.DB, vehicleID, entryTime)
 }
 
+// findActiveReservationForExit 查找离场时关联的预约（支持事务）
+// 严格按照用户要求：按车牌号、停车场、停车位类型、停车位序号，按离场时间最近的一次预订时间筛选
+func findActiveReservationForExit(db *gorm.DB, vehicleID uint, lotID uint, spaceType string, spaceNumber string, exitTime time.Time) (*model.ReservationOrder, error) {
+	var reservation model.ReservationOrder
+
+	// 检查是否需要 JOIN parking_space 表
+	needsJoin := spaceType != "" || spaceNumber != ""
+
+	// 构建查询条件：必须匹配车牌号、停车场
+	// 按离场时间最近的一次预订时间筛选（按预订开始时间降序排列，取第一条）
+	// 使用表前缀避免列名歧义（当有 JOIN 时）
+	query := db.Model(&model.ReservationOrder{})
+
+	// 如果需要进行 JOIN，先执行 JOIN
+	if needsJoin {
+		query = query.Joins("JOIN parking_space ON reservation_order.space_id = parking_space.space_id")
+		// 使用表前缀避免列名歧义
+		query = query.Where("reservation_order.vehicle_id = ?", vehicleID).
+			Where("reservation_order.lot_id = ?", lotID).
+			Where("reservation_order.status = ?", 2) // 2-使用中，只查找状态为"使用中"的预订
+	} else {
+		// 没有 JOIN 时，不需要表前缀
+		query = query.Where("vehicle_id = ?", vehicleID).
+			Where("lot_id = ?", lotID).
+			Where("status = ?", 2) // 2-使用中，只查找状态为"使用中"的预订
+	}
+
+	// 如果提供了停车位类型，则同时匹配
+	if spaceType != "" {
+		query = query.Where("parking_space.space_type = ?", spaceType)
+	}
+
+	// 如果提供了停车位序号，则同时匹配
+	if spaceNumber != "" {
+		query = query.Where("parking_space.space_number = ?", spaceNumber)
+	}
+
+	// 预加载关联数据
+	query = query.Preload("Space").
+		Preload("Lot").
+		Preload("Vehicle")
+
+	// 按预订开始时间降序排列，选择离场时间最近的一次预订（即最晚开始的预订）
+	err := query.
+		Order("reservation_order.start_time DESC").
+		First(&reservation).Error
+
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, gorm.ErrRecordNotFound
+		}
+		return nil, err
+	}
+
+	return &reservation, nil
+}
+
 // findActiveReservationWithTx 查找有效的预约（支持事务）
 // 查找与停车记录关联的预约，优先查找状态为使用中的，如果没有则查找已预订的
+// 改进：放宽时间匹配条件，允许在预订时间段前后一定范围内匹配，提高容错性
+// 注意：此函数保留用于兼容旧代码，新的离场逻辑应使用 findActiveReservationForExit
 func findActiveReservationWithTx(db *gorm.DB, vehicleID uint, entryTime time.Time) (*model.ReservationOrder, error) {
 	var reservation model.ReservationOrder
+
+	// 允许的时间偏差：前后1小时（容错处理，避免时间精度问题）
+	timeWindow := 1 * time.Hour
+	earliestTime := entryTime.Add(-timeWindow)
+	latestTime := entryTime.Add(timeWindow)
 
 	// 先尝试查找状态为使用中的预约
 	err := db.
 		Where("vehicle_id = ?", vehicleID).
-		Where("start_time <= ? AND end_time >= ?", entryTime, entryTime).
+		Where("start_time <= ? AND end_time >= ?", latestTime, earliestTime).
 		Where("status = ?", 2).   // 2-使用中
 		Order("start_time DESC"). // 如果有多个，选择最晚开始的
 		First(&reservation).Error
@@ -681,7 +850,7 @@ func findActiveReservationWithTx(db *gorm.DB, vehicleID uint, entryTime time.Tim
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		err = db.
 			Where("vehicle_id = ?", vehicleID).
-			Where("start_time <= ? AND end_time >= ?", entryTime, entryTime).
+			Where("start_time <= ? AND end_time >= ?", latestTime, earliestTime).
 			Where("status = ?", 1). // 1-已预订
 			Order("start_time DESC").
 			First(&reservation).Error
@@ -691,8 +860,43 @@ func findActiveReservationWithTx(db *gorm.DB, vehicleID uint, entryTime time.Tim
 		}
 	}
 
+	// 如果还是没找到，尝试更宽泛的匹配：扩大时间窗口到前后2小时
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return nil, nil
+		wideTimeWindow := 2 * time.Hour
+		wideEarliestTime := entryTime.Add(-wideTimeWindow)
+		wideLatestTime := entryTime.Add(wideTimeWindow)
+		
+		// 先查找使用中的
+		err = db.
+			Where("vehicle_id = ?", vehicleID).
+			Where("(start_time <= ? AND end_time >= ?) OR (start_time <= ? AND start_time >= ?)", 
+				wideLatestTime, wideEarliestTime, entryTime, wideEarliestTime).
+			Where("status = ?", 2). // 2-使用中
+			Order("start_time DESC").
+			First(&reservation).Error
+
+		if err == nil {
+			return &reservation, nil
+		}
+
+		// 再查找已预订的
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			err = db.
+				Where("vehicle_id = ?", vehicleID).
+				Where("(start_time <= ? AND end_time >= ?) OR (start_time <= ? AND start_time >= ?)", 
+					wideLatestTime, wideEarliestTime, entryTime, wideEarliestTime).
+				Where("status = ?", 1). // 1-已预订
+				Order("start_time DESC").
+				First(&reservation).Error
+
+			if err == nil {
+				return &reservation, nil
+			}
+		}
+	}
+
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, gorm.ErrRecordNotFound
 	}
 
 	return nil, err
