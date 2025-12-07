@@ -62,6 +62,10 @@
   - 创建数据库：`CREATE DATABASE smart_parking CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;`
   - 创建用户并授权（或使用 root 用户）
   - 修改配置文件 `smart_parking_backend/config/config.yaml` 中的数据库连接信息
+  **数据库建表和插入数据**：
+  - 建表：buildSQL.md
+  - 插入：SQLdata.md
+  - 生成和插入更多测试数据：运行smart_parking_backend/generate_test_data.sh即可(或许需要些许改动)。
 
 #### 3. Redis
 - **版本要求**：Redis 5.0 或更高版本
