@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"smart_parking_backend/internal/inits"
 	"smart_parking_backend/internal/model"
+	"strings"
 	"time"
 )
 
@@ -22,6 +23,15 @@ func NewService(repo *Repository) *Service {
 // CreateBooking 用户预订车位
 // 流程：查找可用车位 → 创建预订订单 → 标记车位为已预订
 func (s *Service) CreateBooking(userID, vehicleID, lotID uint, start, end time.Time, spaceType string) (*model.ReservationOrder, error) {
+	// 兼容前端“充电桩”与数据库“充电”枚举不一致的问题
+	spaceType = strings.TrimSpace(spaceType)
+	if spaceType == "" {
+		spaceType = "普通"
+	}
+	if spaceType == "充电桩" {
+		spaceType = "充电"
+	}
+
 	space, err := s.repo.FindAvailableSlot(lotID, spaceType)
 	if err != nil {
 		return nil, errors.New("当前停车场无可用车位")
@@ -39,7 +49,7 @@ func (s *Service) CreateBooking(userID, vehicleID, lotID uint, start, end time.T
 		loc = time.Local
 	}
 	now := time.Now().In(loc)
-	
+
 	resCode := fmt.Sprintf("RES-%d-%d", userID, now.UnixNano())
 	order := &model.ReservationOrder{
 		UserID:          userID,
@@ -49,7 +59,7 @@ func (s *Service) CreateBooking(userID, vehicleID, lotID uint, start, end time.T
 		StartTime:       start.In(loc), // 确保使用Asia/Shanghai时区
 		EndTime:         end.In(loc),   // 确保使用Asia/Shanghai时区
 		DurationMinutes: duration,
-		BookingTime:     now,            // 使用Asia/Shanghai时区的当前时间
+		BookingTime:     now, // 使用Asia/Shanghai时区的当前时间
 		Status:          1,
 		PaymentStatus:   0,
 		ReservationCode: resCode,

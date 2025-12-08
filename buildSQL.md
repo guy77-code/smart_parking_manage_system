@@ -1,3 +1,4 @@
+//建表语句
 use smart_parking;
 
 SET NAMES utf8mb4;
@@ -233,6 +234,7 @@ ALTER TABLE `violation_record`
 SET FOREIGN_KEY_CHECKS = 1;
 
 
+--以下为可选部分，若想优化代码，则可进行生成并优化
 -- 索引
 -- 用户信息表索引
 CREATE INDEX idx_users_login ON users_list(username, password_hash);

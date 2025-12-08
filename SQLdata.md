@@ -1,4 +1,5 @@
 use smart_parking;
+-- 重置自增长
 DELETE FROM admins_list;
 ALTER TABLE admins_list AUTO_INCREMENT = 1;
 
@@ -11,9 +12,11 @@ INSERT INTO parking_lot (name, address, total_levels, total_spaces, hourly_rate,
 ('生态公园地下停车场', '成都市武侯区天府大道188号', 2, 100, 4.00, 1, '公园配套生态停车场', NOW(), NOW());
 
 -- 密码均为12345678
+-- 系统管理员信息：
 INSERT INTO admins_list (username, password_hash, phone_number, role, status, create_time) VALUES
 ('system_admin', '$2a$10$5hhN8Jh3aGCPS0ZYIpu4Juz5sTQrgsUzbC1XqH8qz/2yo.SlZUCLq', '18812345678', 'system', 1, NOW());
 
+-- 停车场管理员信息：
 INSERT INTO admins_list (username, password_hash, phone_number, role, lot_id, status, create_time) VALUES
 ('parking_admin_01', '$2a$10$5hhN8Jh3aGCPS0ZYIpu4Juz5sTQrgsUzbC1XqH8qz/2yo.SlZUCLq', '13012345678', 'lot_admin', 1, 1, NOW()),
 ('parking_admin_02', '$2a$10$5hhN8Jh3aGCPS0ZYIpu4Juz5sTQrgsUzbC1XqH8qz/2yo.SlZUCLq', '13112345678', 'lot_admin', 2, 1, NOW()),
