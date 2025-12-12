@@ -52,43 +52,69 @@
 ## 二、用户界面
 
 ### 1. 停车状态显示与操作
-**功能描述**：显示当前是否有车辆停在停车场，提供"停车"和"离开"按钮。
+**功能描述**：显示用户所有车辆的停车状态，为每辆车提供独立的"停车"和"离场"操作按钮。
 
 **接口调用**：
+- 获取用户车辆列表：`GET /api/v1/vehicles`
+  - 鉴权：需要用户 JWT
+  - 响应：`{ "total": 数量, "data": [Vehicle...] }`
 - 查询当前在场停车记录：`GET /api/parking/:user_id/active-parking`
   - 路径参数：`user_id`（必填，从登录响应或 token 中获取）
   - 响应（成功，HTTP 200）：`[]ParkingRecord` 数组，包含完整字段：
     - `record_id`、`user_id`、`vehicle_id`、`space_id`、`lot_id`
-    - `vehicle`：车辆信息（`license_plate`、`brand`、`model`、`color`）
+    - `vehicle`：车辆信息（**注意**：车牌号字段为 `LicensePlate`，首字母大写）
+      - `LicensePlate`：车牌号（首字母大写，后端 JSON 标签）
+      - `licensePlate`：车牌号（小写开头，前端兼容）
+      - `license_plate`：车牌号（下划线格式，前端兼容）
+      - `brand`、`model`、`color`：品牌、型号、颜色
     - `space`：车位信息（`space_number`、`space_type`、`is_occupied`、`is_reserved`）
     - `lot`：停车场信息（`name`、`address`、`hourly_rate`）
     - `entry_time`、`exit_time`、`duration_minute`、`fee_calculated`、`fee_paid`、`payment_status`、`record_status` 等
   - 错误响应：
     - HTTP 400：用户ID为空或无效
-    - HTTP 404：未找到在场停车记录
+    - HTTP 404：未找到在场停车记录（返回空数组 `[]`）
     - HTTP 500：查询停车记录失败
 
 **逻辑流程**：
 - **显示逻辑**：
-  - 调用接口查询当前在场停车记录
-  - 如果有记录（HTTP 200）：显示"当前有车辆停在停车场"，显示车牌号（`vehicle.license_plate`）、停车场名称（`lot.name`）、入场时间（`entry_time`）、车位编号（`space.space_number`）等信息，显示"离开"按钮
-  - 如果没有记录（HTTP 404）：显示"当前暂无车辆在使用停车场"，显示"停车"按钮
-  - 如果发生错误（HTTP 400/500）：显示错误提示信息
+  1. 页面加载时，同时调用两个接口：
+     - `GET /api/v1/vehicles`：获取用户所有车辆列表
+     - `GET /api/parking/:user_id/active-parking`：获取所有在场停车记录
+  2. **数据合并**：
+     - 创建停车记录映射表（按车牌号匹配）
+     - **车牌号提取**：从停车记录中提取车牌号时，需要检查多种格式：
+       - 优先：`record.vehicle.LicensePlate`（后端实际返回的字段名）
+       - 兼容：`record.vehicle.licensePlate`、`record.vehicle.license_plate`
+     - 遍历所有车辆，为每辆车设置停车状态（`isParking`）
+     - 如果车辆在场停车记录中找到匹配，`isParking = true`，否则 `isParking = false`
+  3. **列表显示**：
+     - 为每辆车显示一个独立的状态卡片
+     - 显示车牌号、停车状态（"停车中"或"未停车"）
+     - 如果车辆正在停车，显示停车场名称、入场时间、车位编号等信息
+     - 每辆车都有独立的操作按钮：
+       - **停车按钮**：当 `isParking = false` 时显示，点击后跳转到停车页面（预选该车辆）
+       - **离场按钮**：当 `isParking = true` 时显示，点击后调用离场接口
+  4. **多车辆支持**：
+     - 支持用户多辆车同时在场停车
+     - 每辆车的操作互不影响
+     - 一辆车停车后，其他车辆仍可进行停车或离场操作
 
 - **停车操作**：
-  1. 用户点击"停车"按钮
-  2. 调用 `GET /api/v2/getparkinglots` 获取所有停车场列表
-  3. 弹出停车场选择页面，显示附近停车场信息（名称、地址、收费标准、可用车位数等）
-  4. 用户选择停车场后，可查看该停车场的车位可视化界面（见"模拟停车界面"）
-  5. 用户确认后，调用 `POST /api/parking/entry`
-     - 请求体：`{ "license_plate": "车牌号", "space_type": "普通" }`
-  6. 接口返回停车记录信息（`record_id`、`space_id`、`space_number`、`lot_name`、`entry_time` 等）
-  7. 显示"停车成功"提示，更新页面显示当前停车状态
+  1. 用户点击某辆车的"停车"按钮
+  2. 跳转到停车页面（`ParkingEntryPage.qml`），预选该车辆：
+     - 传递 `preSelectedVehicleId` 和 `preSelectedLicensePlate` 参数
+     - 停车页面自动选中该车辆
+  3. 用户选择停车场和车位类型
+  4. 用户确认后，调用 `POST /api/parking/entry`
+     - 请求体：`{ "license_plate": "车牌号", "space_type": "普通", "lot_id": 停车场ID }`
+  5. 接口返回停车记录信息（`record_id`、`space_id`、`space_number`、`lot_name`、`entry_time` 等）
+  6. 显示"停车成功"提示，自动刷新停车状态列表
+  7. 该车辆的状态更新为"停车中"，其他车辆状态不受影响
 
 - **离开操作**：
-  1. 用户点击"离开"按钮
+  1. 用户点击某辆车的"离场"按钮
   2. 调用 `POST /api/parking/exit`
-     - 请求体：`{ "license_plate": "车牌号" }`（必填）
+     - 请求体：`{ "license_plate": "车牌号" }`（必填，使用该车辆的车牌号）
   3. **成功响应**（HTTP 200）：
      - 返回费用信息：
        - `record_id`：停车记录ID
@@ -105,8 +131,14 @@
      - HTTP 404：未找到在场停车记录，显示"当前没有车辆在停车场"提示
      - HTTP 500：服务器错误（查询失败、更新失败、释放车位失败等），显示错误提示并记录日志
   5. 如果成功，跳转到支付页面（使用返回的 `payment_url`）
-  6. 支付成功后，返回用户界面，显示"离开成功"提示
-  7. 更新页面显示为"当前暂无车辆在使用停车场"（重新调用查询接口）
+  6. 支付成功后，返回用户界面，显示"离场成功"提示
+  7. 自动刷新停车状态列表，该车辆的状态更新为"未停车"，其他车辆状态不受影响
+
+- **刷新操作**：
+  - 用户点击"刷新"按钮
+  - 重新调用 `GET /api/v1/vehicles` 和 `GET /api/parking/:user_id/active-parking` 接口
+  - 重新合并数据，更新所有车辆的停车状态
+  - 显示"刷新成功"提示（可选）
 
 ### 2. 预订信息显示
 **功能描述**：显示用户的预订信息，提供预订按钮和刷新按钮。

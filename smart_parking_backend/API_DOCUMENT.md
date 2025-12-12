@@ -848,7 +848,9 @@
       "vehicle_id": 10,
       "vehicle": {
         "vehicle_id": 10,
-        "license_plate": "粤A12345",
+        "LicensePlate": "粤A12345",      // 注意：后端实际返回的字段名是 LicensePlate（首字母大写）
+        "license_plate": "粤A12345",     // 前端兼容字段（下划线格式，可能不存在）
+        "licensePlate": "粤A12345",      // 前端兼容字段（驼峰格式，可能不存在）
         "brand": "测试品牌",
         "model": "测试型号",
         "color": "白色"
@@ -888,7 +890,9 @@
 - **说明**：
   - 返回指定用户所有状态为"在场"（record_status=1）的停车记录
   - 记录包含完整的车辆、车位、停车场信息
+  - **重要**：后端返回的车辆信息中，车牌号字段为 `LicensePlate`（首字母大写），前端需要兼容处理
   - 如果用户没有在场停车记录，返回HTTP 200和空数组`[]`（这是RESTful API的最佳实践，404应该用于资源不存在，而不是查询结果为空）
+  - **多车辆支持**：接口返回数组，支持用户多辆车同时在场停车，前端应为每辆车显示独立的状态和操作按钮
 
 ### 4. 获取停车场车位占用情况（实时概览）
 
@@ -1268,7 +1272,7 @@
   - `user_id`，`username`，`phone`，`email`，`real_name`，`status`
 
 - **Vehicle**
-  - `vehicle_id`，`user_id`，`license_plate`，`brand`，`model`，`color`
+  - `vehicle_id`，`user_id`，`LicensePlate`（**注意**：后端 JSON 标签是 `LicensePlate`，首字母大写），`license_plate`（前端兼容字段），`brand`，`model`，`color`
 
 - **ParkingLot**
   - `lot_id`，`name`，`address`，`total_levels`，`total_spaces`，`hourly_rate`，`status`

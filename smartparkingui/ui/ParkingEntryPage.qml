@@ -13,6 +13,8 @@ Page {
     property int selectedLotId: 0
     property int selectedVehicleId: 0
     property string selectedLicensePlate: ""
+    property int preSelectedVehicleId: 0
+    property string preSelectedLicensePlate: ""
 
     ColumnLayout {
         anchors.fill: parent
@@ -148,11 +150,35 @@ Page {
         // 优先使用后端接口获取车辆列表，authManager.userInfo 作为兜底
         apiClient.getUserVehicles()
         loadUserVehicles()
+        // 如果有预选车辆，设置选中
+        if (preSelectedVehicleId > 0 && preSelectedLicensePlate.length > 0) {
+            Qt.callLater(function() {
+                selectPreSelectedVehicle()
+            })
+        }
+    }
+    
+    function selectPreSelectedVehicle() {
+        for (var i = 0; i < vehicleModel.count; i++) {
+            var v = vehicleModel.get(i)
+            var vid = v.vehicleId || v.vehicle_id || 0
+            var plate = v.licensePlate || v.license_plate || ""
+            if (vid === preSelectedVehicleId && plate === preSelectedLicensePlate) {
+                vehicleComboBox.currentIndex = i
+                break
+            }
+        }
     }
 
     onVisibleChanged: {
         if (visible) {
             loadUserVehicles()
+            // 如果有预选车辆，重新设置选中
+            if (preSelectedVehicleId > 0 && preSelectedLicensePlate.length > 0) {
+                Qt.callLater(function() {
+                    selectPreSelectedVehicle()
+                })
+            }
         }
     }
 

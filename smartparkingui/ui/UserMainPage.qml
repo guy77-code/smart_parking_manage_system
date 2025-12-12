@@ -9,7 +9,6 @@ Page {
     title: "用户中心"
 
     property int userId: 0
-    property string currentLicensePlate: ""
     signal logout()
 
     TabBar {
@@ -39,69 +38,29 @@ Page {
                     anchors.fill: parent
                     spacing: 20
 
-                    Text {
-                        text: "当前停车状态"
-                        font.pixelSize: 20
-                        font.bold: true
-                    }
-
-                    Rectangle {
+                    RowLayout {
                         Layout.fillWidth: true
-                        Layout.preferredHeight: 150
-                        border.color: "gray"
-                        border.width: 1
-                        radius: 5
-
-                        ColumnLayout {
-                            anchors.fill: parent
-                            anchors.margins: 10
-                            spacing: 10
-
-                            Text {
-                                id: parkingStatusText
-                                text: "加载中..."
-                                font.pixelSize: 16
-                            }
-
-                            Text {
-                                id: parkingInfoText
-                                text: ""
-                                font.pixelSize: 14
-                                color: "gray"
-                            }
-
-                            RowLayout {
-                                Button {
-                                    text: "停车"
-                                    visible: parkingStatusText.text === "当前暂无车辆在使用停车场"
-                                    onClicked: {
-                                        // 导航到车辆入场页面
-                                        if (stackView) {
-                                            stackView.push(Qt.resolvedUrl("ParkingEntryPage.qml"), {
-                                                               userId: userId,
-                                                               stackView: stackView
-                                                           })
-                                        } else {
-                                            console.log("stackView is null, cannot navigate to ParkingEntryPage")
-                                        }
-                                    }
-                                }
-
-                                Button {
-                                    text: "离开"
-                                    visible: parkingStatusText.text !== "当前暂无车辆在使用停车场" && parkingStatusText.text !== "加载中..."
-                                    onClicked: {
-                                        console.log("Vehicle exit clicked, license plate:", currentLicensePlate)
-                                        if (currentLicensePlate.length > 0) {
-                                            console.log("Calling vehicleExit with:", currentLicensePlate)
-                                            apiClient.vehicleExit(currentLicensePlate)
-                                        } else {
-                                            console.log("License plate is empty, cannot exit")
-                                        }
-                                    }
-                                }
+                        Text {
+                            text: "车辆停车状态"
+                            font.pixelSize: 20
+                            font.bold: true
+                        }
+                        Item { Layout.fillWidth: true }
+                        Button {
+                            text: "刷新"
+                            onClicked: {
+                                loadParkingStatus()
+                                loadUserVehicles()
                             }
                         }
+                    }
+
+                    ListView {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        model: vehicleParkingStatusModel
+                        delegate: vehicleParkingStatusDelegate
+                        spacing: 10
                     }
                 }
             }
@@ -406,6 +365,10 @@ Page {
         id: userVehicleModel
     }
 
+    ListModel {
+        id: vehicleParkingStatusModel
+    }
+
     // Delegates
     Component {
         id: bookingDelegate
@@ -595,6 +558,118 @@ Page {
     }
 
     Component {
+        id: vehicleParkingStatusDelegate
+        Rectangle {
+            width: ListView.view.width
+            height: 140
+            border.color: "gray"
+            border.width: 1
+            radius: 5
+
+            // 在顶层定义属性，确保在整个组件中可访问
+            // 直接访问模型属性，QML会自动处理绑定
+            property string vehicleLicensePlate: model ? (model.licensePlate || model.license_plate || "") : ""
+            property int vehicleIdValue: model ? (model.vehicleId || model.vehicle_id || 0) : 0
+            property bool vehicleIsParking: model ? (model.isParking === true) : false
+            
+            // 调试：输出模型数据
+            Component.onCompleted: {
+                console.log("=== Delegate Component.onCompleted ===")
+                console.log("model:", model)
+                if (model) {
+                    console.log("  model.licensePlate:", model.licensePlate)
+                    console.log("  model.license_plate:", model.license_plate)
+                    console.log("  model.vehicleId:", model.vehicleId)
+                    console.log("  model.vehicle_id:", model.vehicle_id)
+                    console.log("  model.isParking:", model.isParking)
+                    console.log("  All model keys:", Object.keys(model))
+                } else {
+                    console.log("  ERROR: model is null or undefined!")
+                }
+                console.log("  vehicleLicensePlate:", vehicleLicensePlate)
+                console.log("  vehicleIdValue:", vehicleIdValue)
+                console.log("  vehicleIsParking:", vehicleIsParking)
+            }
+
+            ColumnLayout {
+                anchors.fill: parent
+                anchors.margins: 10
+                spacing: 8
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    Text {
+                        text: "车牌号: " + (vehicleLicensePlate || "未知")
+                        font.pixelSize: 16
+                        font.bold: true
+                    }
+                    Item { Layout.fillWidth: true }
+                    Text {
+                        text: vehicleIsParking ? "停车中" : "未停车"
+                        font.pixelSize: 14
+                        color: vehicleIsParking ? "green" : "gray"
+                    }
+                }
+
+                Text {
+                    visible: vehicleIsParking
+                    text: {
+                        var info = []
+                        if (model.lotName) info.push("停车场: " + model.lotName)
+                        if (model.entryTime) info.push("入场时间: " + formatParkingTime(model.entryTime))
+                        if (model.spaceNumber) info.push("车位: " + model.spaceNumber)
+                        return info.join("\n")
+                    }
+                    font.pixelSize: 12
+                    color: "gray"
+                    Layout.fillWidth: true
+                }
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    Item { Layout.fillWidth: true }
+                    Button {
+                        text: "停车"
+                        visible: !vehicleIsParking
+                        enabled: !vehicleIsParking && vehicleLicensePlate.length > 0
+                        onClicked: {
+                            console.log("Park button clicked:")
+                            console.log("  vehicleLicensePlate:", vehicleLicensePlate)
+                            console.log("  vehicleIdValue:", vehicleIdValue)
+                            console.log("  stackView:", stackView)
+                            
+                            if (vehicleLicensePlate.length > 0 && stackView) {
+                                console.log("Navigating to ParkingEntryPage with:", vehicleLicensePlate, vehicleIdValue)
+                                stackView.push(Qt.resolvedUrl("ParkingEntryPage.qml"), {
+                                                   userId: userId,
+                                                   stackView: stackView,
+                                                   preSelectedVehicleId: vehicleIdValue,
+                                                   preSelectedLicensePlate: vehicleLicensePlate
+                                               })
+                            } else {
+                                console.log("Cannot park: vehicleLicensePlate=", vehicleLicensePlate, "stackView=", stackView)
+                            }
+                        }
+                    }
+                    Button {
+                        text: "离场"
+                        visible: vehicleIsParking
+                        enabled: vehicleIsParking && vehicleLicensePlate.length > 0
+                        onClicked: {
+                            console.log("Vehicle exit clicked for:", vehicleLicensePlate)
+                            if (vehicleLicensePlate.length > 0) {
+                                apiClient.vehicleExit(vehicleLicensePlate)
+                            } else {
+                                console.log("Cannot exit: license plate is empty")
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Component {
         id: violationDelegate
         Rectangle {
             width: ListView.view.width
@@ -721,6 +796,182 @@ Page {
         apiClient.getUserViolations(userId, 0)
     }
 
+    // 合并车辆列表和停车记录，更新 vehicleParkingStatusModel
+    function updateVehicleParkingStatus() {
+        vehicleParkingStatusModel.clear()
+        
+        // 如果车辆列表为空，直接返回
+        if (userVehicleModel.count === 0) {
+            console.log("updateVehicleParkingStatus: No vehicles in userVehicleModel")
+            return
+        }
+        
+        // 确保 activeParkingRecords 是数组
+        if (!activeParkingRecords || !Array.isArray(activeParkingRecords)) {
+            activeParkingRecords = []
+        }
+        
+        // 创建停车记录映射表（按车牌号）
+        var parkingMap = {}
+        console.log("=== Building parking map ===")
+        console.log("activeParkingRecords count:", activeParkingRecords.length)
+        for (var i = 0; i < activeParkingRecords.length; i++) {
+            var record = activeParkingRecords[i]
+            if (!record || typeof record !== "object") {
+                console.log("  Record", i, "is invalid:", record)
+                continue
+            }
+            
+            console.log("  Processing record", i, ":", JSON.stringify(record))
+            
+            var licensePlate = ""
+            // 尝试多种方式获取车牌号（注意后端返回的是 LicensePlate，首字母大写）
+            if (record.vehicle) {
+                // 后端 Vehicle 模型的 JSON 标签是 LicensePlate（首字母大写）
+                licensePlate = record.vehicle.LicensePlate || record.vehicle.licensePlate || record.vehicle.license_plate || ""
+                console.log("    From record.vehicle:")
+                console.log("      LicensePlate:", record.vehicle.LicensePlate)
+                console.log("      licensePlate:", record.vehicle.licensePlate)
+                console.log("      license_plate:", record.vehicle.license_plate)
+                console.log("      Extracted:", licensePlate)
+            }
+            if (!licensePlate && record.license_plate) {
+                licensePlate = record.license_plate
+                console.log("    From record.license_plate:", licensePlate)
+            }
+            if (!licensePlate && record.licensePlate) {
+                licensePlate = record.licensePlate
+                console.log("    From record.licensePlate:", licensePlate)
+            }
+            if (!licensePlate && record.LicensePlate) {
+                licensePlate = record.LicensePlate
+                console.log("    From record.LicensePlate:", licensePlate)
+            }
+            
+            // 如果还是没有，尝试遍历所有属性查找车牌号
+            if (!licensePlate && record.vehicle) {
+                for (var key in record.vehicle) {
+                    if (key.toLowerCase().indexOf("license") >= 0 || key.toLowerCase().indexOf("plate") >= 0) {
+                        var value = record.vehicle[key]
+                        if (typeof value === "string" && value.length > 0) {
+                            licensePlate = value
+                            console.log("    Found license plate in vehicle key", key, ":", licensePlate)
+                            break
+                        }
+                    }
+                }
+            }
+            
+            // 最后尝试在 record 本身查找
+            if (!licensePlate) {
+                for (var key in record) {
+                    if ((key.toLowerCase().indexOf("license") >= 0 || key.toLowerCase().indexOf("plate") >= 0) && key !== "vehicle") {
+                        var value = record[key]
+                        if (typeof value === "string" && value.length > 0) {
+                            licensePlate = value
+                            console.log("    Found license plate in record key", key, ":", licensePlate)
+                            break
+                        }
+                    }
+                }
+            }
+            
+            if (licensePlate.length > 0) {
+                parkingMap[licensePlate] = record
+                console.log("    Added to parkingMap:", licensePlate)
+            } else {
+                console.log("    WARNING: Could not extract license plate from record", i)
+            }
+        }
+        console.log("parkingMap keys:", Object.keys(parkingMap))
+        console.log("updateVehicleParkingStatus: Processing", userVehicleModel.count, "vehicles,", activeParkingRecords.length, "parking records")
+        
+        // 遍历所有车辆，创建状态项
+        for (var j = 0; j < userVehicleModel.count; j++) {
+            var vehicle = userVehicleModel.get(j)
+            if (!vehicle) continue
+            
+            var licensePlate = vehicle.licensePlate || vehicle.license_plate || ""
+            if (licensePlate.length === 0) {
+                console.log("Warning: Vehicle at index", j, "has no license plate")
+                continue
+            }
+            
+            console.log("  Checking vehicle:", licensePlate)
+            var parkingRecord = parkingMap[licensePlate]
+            var isParking = (parkingRecord !== undefined && parkingRecord !== null)
+            console.log("    Found parking record:", isParking, "for", licensePlate)
+            
+            // 确保所有必需的属性都有值
+            var vehicleIdValue = vehicle.vehicleId || vehicle.vehicle_id || 0
+            // 注意：不能使用 "model" 作为属性名，因为会与 QML 的 model 关键字冲突
+            var statusItem = {
+                vehicleId: vehicleIdValue,
+                vehicle_id: vehicleIdValue,
+                licensePlate: licensePlate,
+                license_plate: licensePlate,
+                brand: vehicle.brand || "",
+                vehicleModel: vehicle.model || "",  // 改为 vehicleModel 避免冲突
+                color: vehicle.color || "",
+                isParking: isParking,  // 确保是布尔值
+                recordId: parkingRecord ? (parkingRecord.record_id || parkingRecord.recordId || 0) : 0,
+                lotName: parkingRecord && parkingRecord.lot ? (parkingRecord.lot.name || parkingRecord.lot.lot_name || "") : "",
+                entryTime: parkingRecord ? (parkingRecord.entry_time || parkingRecord.entryTime || "") : "",
+                spaceNumber: parkingRecord && parkingRecord.space ? (parkingRecord.space.space_number || parkingRecord.space.spaceNumber || "") : ""
+            }
+            
+            console.log("Adding vehicle to status model:")
+            console.log("  licensePlate:", licensePlate)
+            console.log("  vehicleId:", vehicleIdValue)
+            console.log("  isParking:", isParking)
+            console.log("  Full statusItem keys:", Object.keys(statusItem))
+            console.log("  statusItem.licensePlate:", statusItem.licensePlate)
+            console.log("  statusItem.license_plate:", statusItem.license_plate)
+            console.log("  statusItem.vehicleId:", statusItem.vehicleId)
+            console.log("  statusItem.vehicle_id:", statusItem.vehicle_id)
+            
+            // 验证数据完整性
+            if (!statusItem.licensePlate || statusItem.licensePlate.length === 0) {
+                console.error("ERROR: licensePlate is empty in statusItem!")
+            }
+            if (!statusItem.vehicleId || statusItem.vehicleId === 0) {
+                console.error("ERROR: vehicleId is invalid in statusItem!")
+            }
+            
+            vehicleParkingStatusModel.append(statusItem)
+            
+            // 验证添加后的数据
+            var lastIndex = vehicleParkingStatusModel.count - 1
+            var addedItem = vehicleParkingStatusModel.get(lastIndex)
+            console.log("  Verified added item at index", lastIndex, ":")
+            console.log("    licensePlate:", addedItem ? addedItem.licensePlate : "null")
+            console.log("    license_plate:", addedItem ? addedItem.license_plate : "null")
+            console.log("    vehicleId:", addedItem ? addedItem.vehicleId : "null")
+        }
+        
+        console.log("updateVehicleParkingStatus: Updated model with", vehicleParkingStatusModel.count, "items")
+    }
+
+    // 格式化停车时间
+    function formatParkingTime(timeStr) {
+        if (!timeStr) return ""
+        try {
+            var date = new Date(timeStr)
+            if (isNaN(date.getTime())) return timeStr
+            var year = date.getFullYear()
+            var month = String(date.getMonth() + 1).padStart(2, '0')
+            var day = String(date.getDate()).padStart(2, '0')
+            var hour = String(date.getHours()).padStart(2, '0')
+            var minute = String(date.getMinutes()).padStart(2, '0')
+            return year + "-" + month + "-" + day + " " + hour + ":" + minute
+        } catch (e) {
+            return timeStr
+        }
+    }
+
+    // 存储当前在场停车记录
+    property var activeParkingRecords: []
+
     Connections {
         target: apiClient
 
@@ -738,9 +989,8 @@ Page {
                 if (url.indexOf("/active-parking") >= 0 && httpStatus === 404) {
                     // 404对于active-parking是正常的（无在场记录），不当作错误处理
                     console.log("No active parking records (404), this is normal")
-                    parkingStatusText.text = "当前暂无车辆在使用停车场"
-                    parkingInfoText.text = ""
-                    currentLicensePlate = ""
+                    activeParkingRecords = []
+                    updateVehicleParkingStatus()
                     return
                 }
                 
@@ -748,20 +998,18 @@ Page {
                 // 特别是401/403错误，不应该导致跳转到登录页
                 if (httpStatus === 401 || httpStatus === 403) {
                     console.log("Authentication error detected, but not navigating to login page")
-                    // 设置为无在场记录状态，避免一直停留在“加载中...”
+                    // 设置为无在场记录状态，避免一直停留在"加载中..."
                     if (url.indexOf("/active-parking") >= 0) {
-                        parkingStatusText.text = "当前暂无车辆在使用停车场"
-                        parkingInfoText.text = ""
-                        currentLicensePlate = ""
+                        activeParkingRecords = []
+                        updateVehicleParkingStatus()
                     }
                     return
                 }
                 
-                // 其他错误：对于停车状态也回落到“暂无车辆”，避免一直“加载中...”
+                // 其他错误：对于停车状态也回落到"暂无车辆"，避免一直"加载中..."
                 if (url.indexOf("/active-parking") >= 0) {
-                    parkingStatusText.text = "当前暂无车辆在使用停车场"
-                    parkingInfoText.text = ""
-                    currentLicensePlate = ""
+                    activeParkingRecords = []
+                    updateVehicleParkingStatus()
                 }
                 return
             }
@@ -783,67 +1031,28 @@ Page {
                     data = response
                 }
                 
-                if (data.length > 0) {
-                    var record = data[0]
-                    console.log("Parking record:", JSON.stringify(record))
-
-                    // 尽可能鲁棒地提取车牌号
-                    var licensePlate = ""
-                    if (record.vehicle) {
-                        licensePlate = record.vehicle.license_plate || record.vehicle.licensePlate || ""
-                        if (!licensePlate) {
-                            // 在 vehicle 对象里兜底查找包含 "license" 的字段
-                            for (var vk in record.vehicle) {
-                                if (typeof record.vehicle[vk] === "string" && vk.toLowerCase().indexOf("license") >= 0) {
-                                    licensePlate = record.vehicle[vk]
-                                    break
-                                }
-                            }
-                        }
+                // 保存停车记录
+                activeParkingRecords = data
+                console.log("=== Active parking records received ===")
+                console.log("Count:", activeParkingRecords.length, "records")
+                if (activeParkingRecords.length > 0) {
+                    console.log("First record (full):", JSON.stringify(activeParkingRecords[0], null, 2))
+                    var firstRecord = activeParkingRecords[0]
+                    if (firstRecord.vehicle) {
+                        console.log("  First record.vehicle:", JSON.stringify(firstRecord.vehicle))
+                        console.log("  First record.vehicle.license_plate:", firstRecord.vehicle.license_plate)
+                        console.log("  First record.vehicle.licensePlate:", firstRecord.vehicle.licensePlate)
                     }
-                    // 也检查是否直接在 record 中带有车牌字段
-                    if (!licensePlate && record.license_plate) {
-                        licensePlate = record.license_plate
-                    }
-                    if (!licensePlate && record.licensePlate) {
-                        licensePlate = record.licensePlate
-                    }
-                    if (!licensePlate) {
-                        // 再兜底一层：在 record 所有字段中搜索类似车牌的字段
-                        for (var rk in record) {
-                            if (typeof record[rk] === "string" && rk.toLowerCase().indexOf("license") >= 0) {
-                                licensePlate = record[rk]
-                                break
-                            }
-                        }
-                    }
-
-                    console.log("Extracted license plate:", licensePlate)
-
-                    var lotName = ""
-                    if (record.lot) {
-                        lotName = record.lot.name || record.lot.lot_name || ""
-                    }
-                    if (!lotName) {
-                        lotName = record.lot_name || ""
-                    }
-
-                    var entryTime = record.entry_time || record.entryTime || ""
-
-                    var statusText = "当前有车辆停在停车场"
-                    var infoText = "车牌号: " + (licensePlate || "未知") + "\n" +
-                                  "停车场: " + (lotName || "未知") + "\n" +
-                                  "入场时间: " + (entryTime || "未知")
-                    parkingStatusText.text = statusText
-                    parkingInfoText.text = infoText
-                    currentLicensePlate = licensePlate || ""
-                    console.log("Set currentLicensePlate to:", currentLicensePlate)
                 } else {
-                    // No active parking records
                     console.log("No active parking records")
-                    parkingStatusText.text = "当前暂无车辆在使用停车场"
-                    parkingInfoText.text = ""
-                    currentLicensePlate = ""
+                }
+                
+                // 更新车辆停车状态模型（只有在车辆列表已加载时才更新）
+                if (userVehicleModel.count > 0) {
+                    console.log("Updating vehicle parking status with", userVehicleModel.count, "vehicles")
+                    updateVehicleParkingStatus()
+                } else {
+                    console.log("Parking records received but vehicles not loaded yet, will update when vehicles are loaded")
                 }
                 return
             }
@@ -855,9 +1064,6 @@ Page {
                     return
                 }
                 // Vehicle exit successful, refresh parking status and bookings
-                parkingStatusText.text = "当前暂无车辆在使用停车场"
-                parkingInfoText.text = ""
-                currentLicensePlate = ""
                 // Reload parking status
                 loadParkingStatus()
                 // 车辆离场后，如果关联了预订，预订状态会更新为已完成，需要刷新预订列表
@@ -934,7 +1140,10 @@ Page {
             // Handle parking entry response - refresh parking status and bookings
             if (url.indexOf("/api/parking/entry") >= 0) {
                 if (!response.hasOwnProperty("error")) {
-                    console.log("Parking entry success, reloading parking status and bookings")
+                    console.log("=== Parking entry success ===")
+                    console.log("Response:", JSON.stringify(response))
+                    // 立即刷新停车状态
+                    console.log("Reloading parking status...")
                     loadParkingStatus()
                     // 车辆入场后，如果使用了预订车位，预订状态会更新为使用中，需要刷新预订列表
                     // 实时刷新预订列表
@@ -943,6 +1152,8 @@ Page {
                     }
                     // 延迟刷新以确保后端状态已更新
                     bookingRefreshTimer.restart()
+                } else {
+                    console.log("Parking entry failed:", response.error)
                 }
                 return
             }
@@ -963,9 +1174,11 @@ Page {
             userVehicleModel.clear()
             if (!vehicles || !Array.isArray(vehicles)) {
                 console.log("onUserVehiclesReceived: vehicles is not array")
+                // 即使没有车辆，也要更新状态（清空列表）
+                updateVehicleParkingStatus()
                 return
             }
-            console.log("onUserVehiclesReceived:", JSON.stringify(vehicles))
+            console.log("onUserVehiclesReceived: received", vehicles.length, "vehicles")
             for (var i = 0; i < vehicles.length; i++) {
                 var v = vehicles[i]
                 if (v && typeof v === "object") {
@@ -985,9 +1198,15 @@ Page {
                             model: v.model || v.Model || "",
                             color: v.color || v.Color || ""
                         })
+                        console.log("Added vehicle to model:", plate, "ID:", vid)
+                    } else {
+                        console.log("Skipped invalid vehicle:", JSON.stringify(v))
                     }
                 }
             }
+            console.log("userVehicleModel now has", userVehicleModel.count, "vehicles")
+            // 更新车辆停车状态模型
+            updateVehicleParkingStatus()
         }
 
         function onActiveParkingRecordsReceived(records) {

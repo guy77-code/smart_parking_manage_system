@@ -5,6 +5,7 @@
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QJsonObject>
+#include <QJsonArray>      // required for vehicles payload and signals
 #include <QJsonDocument>
 #include <QUrl>
 

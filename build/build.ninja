@@ -262,7 +262,7 @@ build SmartParkingUI_autogen/EWIEGA46WW/qrc_resources.cpp | ${cmake_ninja_workdi
 #############################################
 # Phony custom command for CMakeFiles/SmartParkingUI_autogen_timestamp_deps
 
-build CMakeFiles/SmartParkingUI_autogen_timestamp_deps | ${cmake_ninja_workdir}CMakeFiles/SmartParkingUI_autogen_timestamp_deps: phony /home/ubuntu/Qt/6.8.3/gcc_64/lib/libQt6QuickControls2.so.6.8.3 /home/ubuntu/Qt/6.8.3/gcc_64/lib/libQt6Quick.so.6.8.3 /home/ubuntu/Qt/6.8.3/gcc_64/lib/libQt6Core.so.6.8.3 /home/ubuntu/Qt/6.8.3/gcc_64/libexec/moc /home/ubuntu/Qt/6.8.3/gcc_64/lib/libQt6Network.so.6.8.3 /home/ubuntu/Qt/6.8.3/gcc_64/lib/libQt6Charts.so.6.8.3 /home/ubuntu/Qt/6.8.3/gcc_64/libexec/uic
+build CMakeFiles/SmartParkingUI_autogen_timestamp_deps | ${cmake_ninja_workdir}CMakeFiles/SmartParkingUI_autogen_timestamp_deps: phony /home/ubuntu/Qt/6.8.3/gcc_64/lib/libQt6Network.so.6.8.3 /home/ubuntu/Qt/6.8.3/gcc_64/lib/libQt6Core.so.6.8.3 /home/ubuntu/Qt/6.8.3/gcc_64/libexec/moc /home/ubuntu/Qt/6.8.3/gcc_64/lib/libQt6Quick.so.6.8.3 /home/ubuntu/Qt/6.8.3/gcc_64/lib/libQt6Charts.so.6.8.3 /home/ubuntu/Qt/6.8.3/gcc_64/lib/libQt6QuickControls2.so.6.8.3 /home/ubuntu/Qt/6.8.3/gcc_64/libexec/uic
 
 
 #############################################
